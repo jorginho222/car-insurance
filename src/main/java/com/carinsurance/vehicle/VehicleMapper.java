@@ -16,6 +16,7 @@ public class VehicleMapper {
 
     /** Copies scalar fields only; the owning insured is managed by the service through {@code Insured} helpers. */
     public void updateEntity(Vehicle vehicle, VehicleRequest request) {
+        vehicle.setType(request.type());
         vehicle.setBrand(request.brand().trim());
         vehicle.setModel(request.model().trim());
         vehicle.setYear(request.year());
@@ -26,6 +27,7 @@ public class VehicleMapper {
         return new VehicleResponse(
                 vehicle.getId(),
                 vehicle.getInsured().getId(),
+                vehicle.getType(),
                 vehicle.getBrand(),
                 vehicle.getModel(),
                 vehicle.getYear(),

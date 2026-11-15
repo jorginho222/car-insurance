@@ -65,6 +65,7 @@ class VehicleServiceTest {
         assertThat(response.id()).isEqualTo(10L);
         assertThat(response.insuredId()).isEqualTo(1L);
         assertThat(response.licensePlate()).isEqualTo("ABC-123");
+        assertThat(response.type()).isEqualTo(VehicleType.CAR);
         assertThat(owner.getVehicles()).hasSize(1);
         assertThat(owner.getVehicles().getFirst().getInsured()).isSameAs(owner);
     }
@@ -113,6 +114,18 @@ class VehicleServiceTest {
         assertThat(response.licensePlate()).isEqualTo("XYZ-999");
         assertThat(oldOwner.getVehicles()).isEmpty();
         assertThat(newOwner.getVehicles()).containsExactly(vehicle);
+    }
+
+    @Test
+    void updateChangesType() {
+        Vehicle vehicle = vehicleOwnedBy(insured(1L), 10L);
+        given(repository.findById(10L)).willReturn(Optional.of(vehicle));
+        given(repository.saveAndFlush(vehicle)).willReturn(vehicle);
+
+        VehicleResponse response = service.update(10L, VehicleTestData.request(1L, "ABC-123", VehicleType.MOTORCYCLE));
+
+        assertThat(response.type()).isEqualTo(VehicleType.MOTORCYCLE);
+        assertThat(vehicle.getType()).isEqualTo(VehicleType.MOTORCYCLE);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.carinsurance.vehicle.dto;
 
+import com.carinsurance.vehicle.VehicleType;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -8,6 +9,7 @@ import jakarta.validation.constraints.Size;
 
 public record VehicleRequest(
         @NotNull Long insuredId,
+        @NotNull VehicleType type,
         @NotBlank @Size(max = 100) String brand,
         @NotBlank @Size(max = 100) String model,
         @NotNull @Min(1900) Integer year,

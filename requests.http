@@ -57,6 +57,7 @@ Content-Type: application/json
 
 {
   "insuredId": 5,
+  "type": "CAR",
   "brand": "Fiat",
   "model": "600",
   "year": 2020,
@@ -75,6 +76,7 @@ Content-Type: application/json
 
 {
   "insuredId": 4,
+  "type": "CAR",
   "brand": "Fitanga",
   "model": "600",
   "year": 1966,

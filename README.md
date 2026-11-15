@@ -74,8 +74,10 @@ resource, referencing the owner by `insuredId`.
 
 Request body:
 ```json
-{ "insuredId": 1, "brand": "Toyota", "model": "Corolla", "year": 2020, "licensePlate": "ABC-123" }
+{ "insuredId": 1, "type": "CAR", "brand": "Toyota", "model": "Corolla", "year": 2020, "licensePlate": "ABC-123" }
 ```
+- `type` is required, one of `CAR`, `MOTORCYCLE`, `SUV`, `PICKUP`, `VAN`, `TRUCK`, `BUS`.
+  An unknown value returns 400 with `errors.type` listing the allowed values.
 - `licensePlate` is trimmed and upper-cased, and must be unique (letters, digits, spaces, hyphens; max 20).
 - `year` must be between 1900 and next year.
 - Changing `insuredId` on `PUT` transfers the vehicle to another insured.

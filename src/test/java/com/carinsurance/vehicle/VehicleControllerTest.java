@@ -36,7 +36,8 @@ class VehicleControllerTest {
     private VehicleService service;
 
     private static VehicleResponse response(long id) {
-        return new VehicleResponse(id, 1L, "Toyota", "Corolla", 2020, "ABC-123", Instant.now(), Instant.now());
+        return new VehicleResponse(
+                id, 1L, VehicleType.CAR, "Toyota", "Corolla", 2020, "ABC-123", Instant.now(), Instant.now());
     }
 
     @Test
@@ -61,6 +62,34 @@ class VehicleControllerTest {
                 .andExpect(jsonPath("$.title").value("Validation failed"))
                 .andExpect(jsonPath("$.errors.insuredId").exists())
                 .andExpect(jsonPath("$.errors.licensePlate").exists());
+    }
+
+    @Test
+    void createReturns400WhenTypeMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/vehicles")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VehicleTestData.json(1L, "ABC-123", null)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.type").value("must not be null"));
+    }
+
+    @Test
+    void createReturns400ListingAllowedValuesForUnknownType() throws Exception {
+        mockMvc.perform(post("/api/v1/vehicles")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VehicleTestData.json(1L, "ABC-123", "PLANE")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Validation failed"))
+                .andExpect(jsonPath("$.errors.type")
+                        .value("must be one of [CAR, MOTORCYCLE, SUV, PICKUP, VAN, TRUCK, BUS]"));
+    }
+
+    @Test
+    void createReturns400ForMalformedJson() throws Exception {
+        mockMvc.perform(post("/api/v1/vehicles")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ not json"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

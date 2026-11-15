@@ -74,6 +74,7 @@ class VehicleIntegrationTest {
                         .content(VehicleTestData.json(owner, "abc-123")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.licensePlate").value("ABC-123"))
+                .andExpect(jsonPath("$.type").value("CAR"))
                 .andExpect(jsonPath("$.insuredId").value(owner))
                 .andExpect(jsonPath("$.createdAt").exists())
                 .andReturn()
@@ -87,8 +88,9 @@ class VehicleIntegrationTest {
 
         mockMvc.perform(put(BASE + "/" + id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(VehicleTestData.json(other, "XYZ-999")))
+                        .content(VehicleTestData.json(other, "XYZ-999", "MOTORCYCLE")))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.type").value("MOTORCYCLE"))
                 .andExpect(jsonPath("$.insuredId").value(other))
                 .andExpect(jsonPath("$.licensePlate").value("XYZ-999"));
 

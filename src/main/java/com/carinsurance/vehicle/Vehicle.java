@@ -4,6 +4,8 @@ import com.carinsurance.insured.Insured;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -32,6 +34,10 @@ public class Vehicle {
     @JoinColumn(name = "insured_id", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Insured insured;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private VehicleType type;
 
     @Column(nullable = false, length = 100)
     private String brand;
@@ -74,6 +80,14 @@ public class Vehicle {
      */
     public void setInsured(Insured insured) {
         this.insured = insured;
+    }
+
+    public VehicleType getType() {
+        return type;
+    }
+
+    public void setType(VehicleType type) {
+        this.type = type;
     }
 
     public String getBrand() {
