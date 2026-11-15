@@ -1,6 +1,6 @@
 # Car Insurance
 
-Spring Boot 4.1 / Java 21 backend for a car insurance company. Currently provides CRUD for **insureds** (policyholders).
+Spring Boot 4.1 / Java 21 backend for a car insurance company. Currently provides CRUD for **insureds** (policyholders) and their **vehicles**.
 
 ## Prerequisites
 - Docker (always)
@@ -26,7 +26,7 @@ bin/mvnw-docker test -Dtest=InsuredServiceTest
 Spring Boot's Docker Compose support starts PostgreSQL from `compose.yaml` automatically.
 Flyway applies migrations from `src/main/resources/db/migration` on startup.
 
-- API: `http://localhost:8080/api/v1/insureds`
+- API: `http://localhost:8080/api/v1/insureds`, `http://localhost:8080/api/v1/vehicles`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - Health: `http://localhost:8080/actuator/health`
 
@@ -51,13 +51,34 @@ Java code is formatted with [Spotless](https://github.com/diffplug/spotless) usi
 
 ## API
 
+### Insureds
 | Method | Path | Success | Errors |
 |---|---|---|---|
 | POST | `/api/v1/insureds` | 201 + `Location` | 400 validation, 409 duplicate document/email |
 | GET | `/api/v1/insureds/{id}` | 200 | 404 |
 | GET | `/api/v1/insureds?page=&size=&sort=` | 200 (paged) | |
 | PUT | `/api/v1/insureds/{id}` | 200 | 400, 404, 409 |
-| DELETE | `/api/v1/insureds/{id}` | 204 | 404 |
+| DELETE | `/api/v1/insureds/{id}` | 204 (also deletes the insured's vehicles) | 404 |
+
+### Vehicles
+An insured owns one or more vehicles (1 to N). Vehicles are registered by company staff through their own
+resource, referencing the owner by `insuredId`.
+
+| Method | Path | Success | Errors |
+|---|---|---|---|
+| POST | `/api/v1/vehicles` | 201 + `Location` | 400 validation/invalid year, 404 unknown insured, 409 duplicate plate |
+| GET | `/api/v1/vehicles/{id}` | 200 | 404 |
+| GET | `/api/v1/vehicles?insuredId=&page=&size=&sort=` | 200 (paged; `insuredId` optional) | |
+| PUT | `/api/v1/vehicles/{id}` | 200 | 400, 404, 409 |
+| DELETE | `/api/v1/vehicles/{id}` | 204 | 404 |
+
+Request body:
+```json
+{ "insuredId": 1, "brand": "Toyota", "model": "Corolla", "year": 2020, "licensePlate": "ABC-123" }
+```
+- `licensePlate` is trimmed and upper-cased, and must be unique (letters, digits, spaces, hyphens; max 20).
+- `year` must be between 1900 and next year.
+- Changing `insuredId` on `PUT` transfers the vehicle to another insured.
 
 Errors use RFC 7807 `application/problem+json`; validation errors include a per-field `errors` map.
 
@@ -65,6 +86,7 @@ Errors use RFC 7807 `application/problem+json`; validation errors include a per-
 ```
 com.carinsurance
 ├── common/      cross-cutting config and exception handling
-└── insured/     entity, repository, service, controller, DTOs
+├── insured/     entity, repository, service, controller, DTOs
+└── vehicle/     entity, repository, service, controller, DTOs
 ```
-New domains (vehicles, policies, claims, ...) should get their own feature package alongside `insured/`.
+New domains (policies, claims, ...) should get their own feature package alongside `insured/`.
