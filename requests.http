@@ -1,0 +1,85 @@
+### Create insured
+POST http://localhost:8080/api/v1/insureds
+Content-Type: application/json
+
+{
+  "firstName": "Carlo",
+  "lastName": "Garibuldi",
+  "documentNumber": "DOC-2",
+  "dateOfBirth": "1990-05-17",
+  "email": "carlo@example.com",
+  "phone": "+1 555 123 4567",
+  "address": {
+    "street": "123 Main St",
+    "city": "Springfield",
+    "state": "IL",
+    "postalCode": "62701",
+    "country": "USA"
+  },
+  "licenseNumber": "DL-998877",
+  "licenseIssueDate": "2010-06-01"
+}
+
+### Get insured by id
+GET http://localhost:8080/api/v1/insureds/3
+
+### List insureds (paged)
+GET http://localhost:8080/api/v1/insureds?page=0&size=20&sort=lastName,asc
+
+### Update insured
+PUT http://localhost:8080/api/v1/insureds/4
+Content-Type: application/json
+
+{
+  "firstName": "Jane edt",
+  "lastName": "Smith",
+  "documentNumber": "DOC-1",
+  "dateOfBirth": "1990-05-17",
+  "email": "jane.smith@example.com",
+  "phone": "+1 555 123 4567",
+  "address": {
+    "street": "456 Oak Ave",
+    "city": "Springfield",
+    "state": "IL",
+    "postalCode": "62702",
+    "country": "USA"
+  },
+  "licenseNumber": "DL-998877",
+  "licenseIssueDate": "2010-06-01"
+}
+
+### Delete insured
+DELETE http://localhost:8080/api/v1/insureds/4
+
+### Create vehicle for an insured
+POST http://localhost:8080/api/v1/vehicles
+Content-Type: application/json
+
+{
+  "insuredId": 5,
+  "brand": "Fiat",
+  "model": "600",
+  "year": 2020,
+  "licensePlate": "ABC-124"
+}
+
+### Get vehicle by id
+GET http://localhost:8080/api/v1/vehicles/2
+
+### List vehicles of an insured (paged)
+GET http://localhost:8080/api/v1/vehicles?insuredId=4&page=0&size=20&sort=brand,asc
+
+### Update vehicle (changing insuredId transfers ownership)
+PUT http://localhost:8080/api/v1/vehicles/2
+Content-Type: application/json
+
+{
+  "insuredId": 4,
+  "brand": "Fitanga",
+  "model": "600",
+  "year": 1966,
+  "licensePlate": "ABC-124"
+}
+
+### Delete vehicle
+DELETE http://localhost:8080/api/v1/vehicles/3

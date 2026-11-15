@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Run the Maven wrapper inside a JDK 21 container, so no local JDK is needed.
+# Usage: bin/mvnw-docker verify        (all tests, incl. Testcontainers)
+#        bin/mvnw-docker test -Dtest=InsuredServiceTest
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
+mkdir -p "$HOME/.m2"
+
+TTY_FLAGS=()
+[ -t 0 ] && [ -t 1 ] && TTY_FLAGS=(-it)
+
+exec docker run --rm "${TTY_FLAGS[@]}" \
+  --network host \
+  -u "$(id -u):$(id -g)" \
+  --group-add "$(stat -c %g "$DOCKER_SOCK")" \
+  -e HOME=/tmp \
+  -v "$HOME/.m2:/tmp/.m2" \
+  -v "$DOCKER_SOCK:/var/run/docker.sock" \
+  -v "$PROJECT_DIR:$PROJECT_DIR" \
+  -w "$PROJECT_DIR" \
+  eclipse-temurin:21-jdk \
+  ./mvnw -B "$@"
