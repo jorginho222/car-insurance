@@ -1,7 +1,7 @@
-package com.carinsurance.vehicle;
+package com.carinsurance.insured;
 
-import com.carinsurance.vehicle.dto.VehicleRequest;
-import com.carinsurance.vehicle.dto.VehicleResponse;
+import com.carinsurance.insured.dto.InsuredVehicleRequest;
+import com.carinsurance.insured.dto.InsuredVehicleResponse;
 import jakarta.validation.Valid;
 import java.net.URI;
 import org.springframework.data.domain.Pageable;
@@ -16,23 +16,23 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @RestController
-@RequestMapping("/api/v1/vehicles")
-public class VehicleController {
+@RequestMapping("/api/v1/insureds/{insuredId}/vehicles")
+public class InsuredVehicleController {
 
-    private final VehicleService service;
+    private final InsuredVehicleService service;
 
-    public VehicleController(VehicleService service) {
+    public InsuredVehicleController(InsuredVehicleService service) {
         this.service = service;
     }
 
     @PostMapping
-    public ResponseEntity<VehicleResponse> create(@Valid @RequestBody VehicleRequest request) {
-        VehicleResponse created = service.create(request);
+    public ResponseEntity<InsuredVehicleResponse> create(
+            @PathVariable Long insuredId, @Valid @RequestBody InsuredVehicleRequest request) {
+        InsuredVehicleResponse created = service.create(insuredId, request);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
                 .buildAndExpand(created.id())
@@ -41,25 +41,26 @@ public class VehicleController {
     }
 
     @GetMapping("/{id}")
-    public VehicleResponse findById(@PathVariable Long id) {
-        return service.findById(id);
+    public InsuredVehicleResponse findById(@PathVariable Long insuredId, @PathVariable Long id) {
+        return service.findById(insuredId, id);
     }
 
     @GetMapping
-    public PagedModel<VehicleResponse> findAll(
-            @RequestParam(required = false) Long insuredId,
+    public PagedModel<InsuredVehicleResponse> findAll(
+            @PathVariable Long insuredId,
             @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.ASC) Pageable pageable) {
         return new PagedModel<>(service.findAll(insuredId, pageable));
     }
 
     @PutMapping("/{id}")
-    public VehicleResponse update(@PathVariable Long id, @Valid @RequestBody VehicleRequest request) {
-        return service.update(id, request);
+    public InsuredVehicleResponse update(
+            @PathVariable Long insuredId, @PathVariable Long id, @Valid @RequestBody InsuredVehicleRequest request) {
+        return service.update(insuredId, id, request);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        service.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable Long insuredId, @PathVariable Long id) {
+        service.delete(insuredId, id);
         return ResponseEntity.noContent().build();
     }
 }

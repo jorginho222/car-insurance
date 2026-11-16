@@ -1,18 +1,16 @@
-package com.carinsurance.vehicle.dto;
+package com.carinsurance.insured.dto;
 
-import com.carinsurance.vehicle.VehicleType;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-public record VehicleRequest(
-        @NotNull Long insuredId,
-        @NotNull VehicleType type,
-        @NotBlank @Size(max = 100) String brand,
-        @NotBlank @Size(max = 100) String model,
-        @NotNull @Min(1900) Integer year,
+/**
+ * {@code valuationId} is the id of a valuation from {@code GET /api/v1/vehicle-catalog/{catalogId}/valuations}; it
+ * identifies both the catalog entry (make, model, version, type) and the model year.
+ */
+public record InsuredVehicleRequest(
+        @NotNull Long valuationId,
 
         @NotBlank
         @Size(max = 20)

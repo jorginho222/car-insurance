@@ -1,6 +1,5 @@
 package com.carinsurance.insured;
 
-import com.carinsurance.vehicle.Vehicle;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -57,10 +56,9 @@ public class Insured {
     @Column(name = "license_issue_date", nullable = false)
     private LocalDate licenseIssueDate;
 
-    // No orphanRemoval: vehicles can be transferred between insureds, and orphan removal would delete them when they
-    // are taken out of the previous owner's list. Vehicles are deleted explicitly via VehicleService.delete.
-    @OneToMany(mappedBy = "insured", cascade = CascadeType.ALL)
-    private List<Vehicle> vehicles = new ArrayList<>();
+    // Vehicles are never transferred between insureds, so removing one from this list deletes it.
+    @OneToMany(mappedBy = "insured", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<InsuredVehicle> vehicles = new ArrayList<>();
 
     @Version
     private Long version;
@@ -153,16 +151,16 @@ public class Insured {
         this.licenseIssueDate = licenseIssueDate;
     }
 
-    public List<Vehicle> getVehicles() {
+    public List<InsuredVehicle> getVehicles() {
         return Collections.unmodifiableList(vehicles);
     }
 
-    public void addVehicle(Vehicle vehicle) {
+    public void addVehicle(InsuredVehicle vehicle) {
         vehicles.add(vehicle);
         vehicle.setInsured(this);
     }
 
-    public void removeVehicle(Vehicle vehicle) {
+    public void removeVehicle(InsuredVehicle vehicle) {
         vehicles.remove(vehicle);
         vehicle.setInsured(null);
     }
