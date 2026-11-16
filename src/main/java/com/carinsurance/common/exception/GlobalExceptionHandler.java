@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
@@ -74,12 +75,26 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                     .map(JacksonException.Reference::getPropertyName)
                     .filter(name -> name != null)
                     .collect(Collectors.joining("."));
-            String allowed = Arrays.stream(invalidFormat.getTargetType().getEnumConstants())
-                    .map(Object::toString)
-                    .collect(Collectors.joining(", ", "[", "]"));
-            return validationFailed(Map.of(field, "must be one of " + allowed));
+            return validationFailed(Map.of(field, mustBeOneOf(invalidFormat.getTargetType())));
         }
         return super.handleHttpMessageNotReadable(ex, headers, status, request);
+    }
+
+    /** Turns an unknown enum value in a query/path parameter (e.g. {@code ?vehicleType=PLANE}) into a field error. */
+    @Override
+    protected ResponseEntity<Object> handleTypeMismatch(
+            TypeMismatchException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Class<?> requiredType = ex.getRequiredType();
+        if (ex.getPropertyName() != null && requiredType != null && requiredType.isEnum()) {
+            return validationFailed(Map.of(ex.getPropertyName(), mustBeOneOf(requiredType)));
+        }
+        return super.handleTypeMismatch(ex, headers, status, request);
+    }
+
+    private static String mustBeOneOf(Class<?> enumType) {
+        return Arrays.stream(enumType.getEnumConstants())
+                .map(Object::toString)
+                .collect(Collectors.joining(", ", "must be one of [", "]"));
     }
 
     private static ResponseEntity<Object> validationFailed(Map<String, String> errors) {

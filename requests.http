@@ -51,37 +51,44 @@ Content-Type: application/json
 ### Delete insured
 DELETE http://localhost:8080/api/v1/insureds/4
 
+### Catalog step 1-2: makes for a vehicle type
+GET http://localhost:8080/api/v1/vehicle-catalog/makes?vehicleType=CAR
+
+### Catalog step 3: models of a make
+GET http://localhost:8080/api/v1/vehicle-catalog/models?vehicleType=CAR&make=Toyota
+
+### Catalog step 4: versions of a model (each one is a catalog entry with its id)
+GET http://localhost:8080/api/v1/vehicle-catalog/versions?vehicleType=CAR&make=Toyota&model=Corolla
+
+### Get catalog entry by id
+GET http://localhost:8080/api/v1/vehicle-catalog/2
+
+### Catalog step 5: current valuation per year of a catalog entry (send its id as valuationId)
+GET http://localhost:8080/api/v1/vehicle-catalog/2/valuations
+
 ### Create vehicle for an insured
-POST http://localhost:8080/api/v1/vehicles
+POST http://localhost:8080/api/v1/insureds/5/vehicles
 Content-Type: application/json
 
 {
-  "insuredId": 5,
-  "type": "CAR",
-  "brand": "Fiat",
-  "model": "600",
-  "year": 2020,
+  "valuationId": 455,
   "licensePlate": "ABC-124"
 }
 
 ### Get vehicle by id
-GET http://localhost:8080/api/v1/vehicles/2
+GET http://localhost:8080/api/v1/insureds/5/vehicles/1
 
 ### List vehicles of an insured (paged)
-GET http://localhost:8080/api/v1/vehicles?insuredId=4&page=0&size=20&sort=brand,asc
+GET http://localhost:8080/api/v1/insureds/5/vehicles?page=0&size=20&sort=licensePlate,asc
 
-### Update vehicle (changing insuredId transfers ownership)
-PUT http://localhost:8080/api/v1/vehicles/2
+### Update vehicle (change plate and/or selected valuation)
+PUT http://localhost:8080/api/v1/insureds/5/vehicles/1
 Content-Type: application/json
 
 {
-  "insuredId": 4,
-  "type": "CAR",
-  "brand": "Fitanga",
-  "model": "600",
-  "year": 1966,
-  "licensePlate": "ABC-124"
+  "valuationId": 21,
+  "licensePlate": "ABC-125"
 }
 
 ### Delete vehicle
-DELETE http://localhost:8080/api/v1/vehicles/3
+DELETE http://localhost:8080/api/v1/insureds/5/vehicles/1

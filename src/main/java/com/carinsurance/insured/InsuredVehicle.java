@@ -1,11 +1,9 @@
-package com.carinsurance.vehicle;
+package com.carinsurance.insured;
 
-import com.carinsurance.insured.Insured;
+import com.carinsurance.vehicle.VehicleValuation;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -21,10 +19,11 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+/** A vehicle owned by an insured. Make, model, version, type and year come from the selected catalog valuation. */
 @Entity
-@Table(name = "vehicle")
+@Table(name = "insured_vehicle")
 @EntityListeners(AuditingEntityListener.class)
-public class Vehicle {
+public class InsuredVehicle {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,18 +34,9 @@ public class Vehicle {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Insured insured;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private VehicleType type;
-
-    @Column(nullable = false, length = 100)
-    private String brand;
-
-    @Column(nullable = false, length = 100)
-    private String model;
-
-    @Column(nullable = false)
-    private Integer year;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "valuation_id", nullable = false)
+    private VehicleValuation valuation;
 
     @Column(name = "license_plate", nullable = false, unique = true, length = 20)
     private String licensePlate;
@@ -75,43 +65,19 @@ public class Vehicle {
     }
 
     /**
-     * Only meant to be called by {@link Insured#addVehicle(Vehicle)} and {@link Insured#removeVehicle(Vehicle)}, which
-     * keep both sides of the association in sync.
+     * Only meant to be called by {@link Insured#addVehicle(InsuredVehicle)} and
+     * {@link Insured#removeVehicle(InsuredVehicle)}, which keep both sides of the association in sync.
      */
-    public void setInsured(Insured insured) {
+    void setInsured(Insured insured) {
         this.insured = insured;
     }
 
-    public VehicleType getType() {
-        return type;
+    public VehicleValuation getValuation() {
+        return valuation;
     }
 
-    public void setType(VehicleType type) {
-        this.type = type;
-    }
-
-    public String getBrand() {
-        return brand;
-    }
-
-    public void setBrand(String brand) {
-        this.brand = brand;
-    }
-
-    public String getModel() {
-        return model;
-    }
-
-    public void setModel(String model) {
-        this.model = model;
-    }
-
-    public Integer getYear() {
-        return year;
-    }
-
-    public void setYear(Integer year) {
-        this.year = year;
+    public void setValuation(VehicleValuation valuation) {
+        this.valuation = valuation;
     }
 
     public String getLicensePlate() {
