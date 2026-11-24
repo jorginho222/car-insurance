@@ -14,8 +14,8 @@ import java.math.BigDecimal;
 
 /** Multipliers a zone applies to the price of each coverage when quoting. One per zone. */
 @Entity
-@Table(name = "quotation_factor")
-public class QuotationFactor {
+@Table(name = "quotation_zone_factor")
+public class QuotationZoneFactor {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,9 +34,9 @@ public class QuotationFactor {
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal damage;
 
-    protected QuotationFactor() {}
+    protected QuotationZoneFactor() {}
 
-    public QuotationFactor(Zone zone, BigDecimal civilLiability, BigDecimal theft, BigDecimal damage) {
+    public QuotationZoneFactor(Zone zone, BigDecimal civilLiability, BigDecimal theft, BigDecimal damage) {
         this.zone = zone;
         this.civilLiability = civilLiability;
         this.theft = theft;

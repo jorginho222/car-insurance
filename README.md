@@ -142,14 +142,31 @@ Response item:
 - A postal code is **not unique**: it can match many localities (up to about 200), sometimes in different
   provinces. Results are ordered by province, then name.
 - Zones: `CABA`, `GBA`, `Ciudades grandes del interior`, `Resto del país`. Each zone has one row in
-  `quotation_factor` with the multipliers it applies to each coverage price (civil liability, theft, damage), seeded
-  by `V8__create_quotation_factor.sql`. Factors are not exposed in the API yet.
+  `quotation_zone_factor` with the multipliers it applies to each coverage price (civil liability, theft, damage),
+  seeded by `V8__create_quotation_factor.sql` (table renamed in `V9`). Factors are not exposed in the API yet.
 - Data comes from the postal code master file `src/main/resources/data/localidades_cp_maestro.csv` (about 23,000
   localities). On startup, if the `locality` table is empty (fresh install), `LocalitySeeder` imports it through
   `ImportLocalitiesUseCase`. Rows without a postal code and exact duplicates are skipped.
 - Zone rules live in `ZoneResolver`: province or locality "Ciudad Autonoma de Buenos Aires" is `CABA`; a fixed list
   of conurbano postal codes is `GBA`; the postal codes of Gran La Plata, Rosario, Santa Fe, Tucumán, Salta, Córdoba,
   Mendoza, Mar del Plata and Neuquén are `Ciudades grandes del interior`; everything else is `Resto del país`.
+
+### Quotation parameters
+Reference data for calculating quotes later. Not exposed in the API yet.
+
+- **Zone factors** (`quotation_zone_factor`, entity `QuotationZoneFactor`): one row per zone with the multipliers
+  applied to each coverage price (see Localities).
+- **Vehicle parameters** (`quotation_vehicle_parameter`, entity `QuotationVehicleParameter`): one row per vehicle
+  type with a `civilLiabilityBaseAmount`, which is a fixed base premium for civil liability coverage (USD, like the
+  vehicle valuations, and not linked to them), and a `theftRate` and `damageRate` applied to the vehicle valuation. Rates are fractions: 4% is stored as `0.04`. They must be greater than 0 and
+  less than 1. They are seeded with approximate values by `V9__rename_quotation_factor_and_add_vehicle_parameter.sql`.
+- **Driver age factors** (`quotation_driver_age_factor`, entity `QuotationDriverAgeFactor`): multipliers for the
+  civil liability and damage coverage prices (no theft) by driver age range: 18–20, 21–24, 25–29, 30–64, 65–74 and
+  75 or more. Ranges are inclusive on both ends (21 and 24 are both in 21–24), and the last range has no `maxAge`
+  (no upper limit). The database rejects overlapping ranges, gaps between ranges and a last range with a `maxAge`. The
+  gap check runs at commit, so a range can be split in one transaction. Use
+  `QuotationDriverAgeFactorRepository.findByAge(age)` to look one up. Seeded by
+  `V10__create_quotation_driver_age_factor.sql`.
 
 Errors use RFC 7807 `application/problem+json`; validation errors include a per-field `errors` map.
 
@@ -159,7 +176,7 @@ com.carinsurance
 ├── common/      cross-cutting config and exception handling
 ├── insured/     insureds and their vehicles (InsuredVehicle → catalog valuation)
 ├── location/    localities by postal code and their pricing zones (read-only reference data)
-├── quotation/   quotation factors per zone (quote calculation will live here)
+├── quotation/   quotation parameters per zone, vehicle type and driver age (quote calculation will live here)
 └── vehicle/     vehicle catalog and valuations (read-only reference data)
 ```
 New domains (policies, claims, ...) should get their own feature package alongside `insured/`.
