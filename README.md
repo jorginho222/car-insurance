@@ -25,7 +25,9 @@ bin/mvnw-docker test -Dtest=InsuredServiceTest
 ./mvnw spring-boot:run
 ```
 Spring Boot's Docker Compose support starts PostgreSQL from `compose.yaml` automatically.
-Flyway applies migrations from `src/main/resources/db/migration` on startup.
+Flyway applies migrations from `src/main/resources/db/migration` on startup. On the first startup (empty
+`locality` table) the app also imports the localities CSV, which takes a few seconds. Disable it with
+`app.localities.import-on-startup=false`.
 
 - API: `http://localhost:8080/api/v1/insureds`, `http://localhost:8080/api/v1/vehicle-catalog`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
@@ -123,6 +125,32 @@ Response:
   be transferred to another insured.
 - A valuation that a vehicle uses cannot be deleted.
 
+### Localities
+Read-only reference data for the insured's location, used to pick the pricing **zone** when quoting. The insured
+enters a postal code and picks one of the matching localities.
+
+| Method | Path | Success | Errors |
+|---|---|---|---|
+| GET | `/api/v1/localities?postalCode=` | 200, list (empty if none match) | 400 missing or not 4 digits |
+| GET | `/api/v1/localities/{id}` | 200 | 404 |
+
+Response item:
+```json
+{ "id": 812, "name": "ROSARIO", "province": "Santa Fe", "postalCode": "2000",
+  "zone": { "id": 3, "name": "Ciudades grandes del interior" } }
+```
+- A postal code is **not unique**: it can match many localities (up to about 200), sometimes in different
+  provinces. Results are ordered by province, then name.
+- Zones: `CABA`, `GBA`, `Ciudades grandes del interior`, `Resto del país`. Each zone has one row in
+  `quotation_factor` with the multipliers it applies to each coverage price (civil liability, theft, damage), seeded
+  by `V8__create_quotation_factor.sql`. Factors are not exposed in the API yet.
+- Data comes from the postal code master file `src/main/resources/data/localidades_cp_maestro.csv` (about 23,000
+  localities). On startup, if the `locality` table is empty (fresh install), `LocalitySeeder` imports it through
+  `ImportLocalitiesUseCase`. Rows without a postal code and exact duplicates are skipped.
+- Zone rules live in `ZoneResolver`: province or locality "Ciudad Autonoma de Buenos Aires" is `CABA`; a fixed list
+  of conurbano postal codes is `GBA`; the postal codes of Gran La Plata, Rosario, Santa Fe, Tucumán, Salta, Córdoba,
+  Mendoza, Mar del Plata and Neuquén are `Ciudades grandes del interior`; everything else is `Resto del país`.
+
 Errors use RFC 7807 `application/problem+json`; validation errors include a per-field `errors` map.
 
 ## Structure
@@ -130,6 +158,8 @@ Errors use RFC 7807 `application/problem+json`; validation errors include a per-
 com.carinsurance
 ├── common/      cross-cutting config and exception handling
 ├── insured/     insureds and their vehicles (InsuredVehicle → catalog valuation)
+├── location/    localities by postal code and their pricing zones (read-only reference data)
+├── quotation/   quotation factors per zone (quote calculation will live here)
 └── vehicle/     vehicle catalog and valuations (read-only reference data)
 ```
 New domains (policies, claims, ...) should get their own feature package alongside `insured/`.
