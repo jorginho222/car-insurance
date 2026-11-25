@@ -98,3 +98,14 @@ GET http://localhost:8080/api/v1/localities?postalCode=2000
 
 ### Get locality by id
 GET http://localhost:8080/api/v1/localities/1
+
+### Quotation (plan: CIVIL_LIABILITY | THIRD_PARTY_EXTENDED | FULL_COVERAGE)
+POST http://localhost:8080/api/v1/quotations
+Content-Type: application/json
+
+{
+  "plan": "FULL_COVERAGE",
+  "valuationId": 503,
+  "birthDate": "2004-05-01",
+  "localityId": 2378
+}

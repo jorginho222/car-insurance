@@ -1,5 +1,6 @@
 package com.carinsurance.common.exception;
 
+import com.carinsurance.quotation.UnderAgeDriverException;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -40,6 +41,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidRequestException.class)
     ProblemDetail handleInvalidRequest(InvalidRequestException ex) {
         return problem(HttpStatus.BAD_REQUEST, "Invalid request", ex.getMessage());
+    }
+
+    @ExceptionHandler(UnderAgeDriverException.class)
+    ProblemDetail handleUnderAgeDriver(UnderAgeDriverException ex) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, "Driver under age", ex.getMessage());
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

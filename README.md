@@ -151,8 +151,62 @@ Response item:
   of conurbano postal codes is `GBA`; the postal codes of Gran La Plata, Rosario, Santa Fe, Tucumán, Salta, Córdoba,
   Mendoza, Mar del Plata and Neuquén are `Ciudades grandes del interior`; everything else is `Resto del país`.
 
+### Quotations
+Calculates a quote. Nothing is stored. The client picks the vehicle with the catalog cascade (ending at a valuation)
+and the locality with the postal code lookup, then sends:
+
+| Method | Path | Success | Errors |
+|---|---|---|---|
+| POST | `/api/v1/quotations` | 200 | 400 validation / valuation not current, 404 valuation or locality, 422 driver under 18 |
+
+```json
+{ "plan": "FULL_COVERAGE", "valuationId": 455, "birthDate": "2004-05-01", "localityId": 812 }
+```
+`plan` is `CIVIL_LIABILITY`, `THIRD_PARTY_EXTENDED` or `FULL_COVERAGE`. `birthDate` must be in the past.
+
+Response (CAR worth 20,000 USD, GBA, driver aged 22):
+```json
+{
+  "validUntil": "2026-12-10",
+  "vehicle": { "description": "Toyota Corolla 2.0 XEI CVT", "make": "Toyota", "model": "Corolla",
+               "modelVersion": "2.0 XEI CVT", "year": 2021, "vehicleType": "CAR", "sumInsured": 20000.00 },
+  "risk": { "postalCode": "1602", "locality": "FLORIDA", "province": "Buenos Aires", "zone": "GBA", "driverAge": 22 },
+  "plan": {
+    "name": "FULL_COVERAGE",
+    "coverages": [
+      { "type": "LIABILITY", "premium": 324.00 },
+      { "type": "THEFT", "premium": 128.00 },
+      { "type": "DAMAGE", "premium": 462.00 }
+    ],
+    "netPremium": 914.00,
+    "paymentOptions": [
+      { "installments": 1, "adminSurcharge": 45.70, "issuanceFee": 10.00, "financingSurcharge": 0.00,
+        "taxableBase": 969.70, "vat": 203.64, "totalPremium": 1173.34,
+        "firstInstallment": 1173.34, "installmentAmount": 1173.34 },
+      { "installments": 12, "adminSurcharge": 45.70, "issuanceFee": 10.00, "financingSurcharge": 77.58,
+        "taxableBase": 1047.28, "vat": 219.93, "totalPremium": 1267.21,
+        "firstInstallment": 105.61, "installmentAmount": 105.60 }
+    ]
+  }
+}
+```
+Calculation (`PremiumCalculator`):
+- Coverage premiums, by plan (each plan includes the previous one):
+  - `CIVIL_LIABILITY`: LIABILITY = `civilLiabilityBaseAmount` × zone `civilLiability` × age `civilLiability`
+  - `THIRD_PARTY_EXTENDED`: + THEFT = sum insured × `theftRate` × zone `theft`
+  - `FULL_COVERAGE`: + DAMAGE = sum insured × `damageRate` × zone `damage` × age `damage`
+- Net premium = the sum of the coverage premiums.
+- Per payment option: admin surcharge = net × `adminSurchargeRate`; plus the `issuanceFeeAmount`; for 12
+  installments only, financing surcharge = (net + admin + fee) × `financingSurchargeRate`. Taxable base = net + admin
+  + fee + financing. IVA = taxable base × `vatRate`. Total = taxable base + IVA.
+- Every amount is rounded to cents (HALF_UP), and sums are built from the rounded parts, so the response adds up
+  exactly. The installment amount is the total ÷ installments rounded down; the first installment takes the leftover
+  cents.
+- Driver age = completed years at the issue date. Under 18 → 422 `Driver under age`.
+- `validUntil` = issue date + `quotation.validity-days` (`application.yml`, default 15).
+
 ### Quotation parameters
-Reference data for calculating quotes later. Not exposed in the API yet.
+Reference data used by the quotation calculation. Not exposed in the API.
 
 - **Zone factors** (`quotation_zone_factor`, entity `QuotationZoneFactor`): one row per zone with the multipliers
   applied to each coverage price (see Localities).
@@ -167,6 +221,9 @@ Reference data for calculating quotes later. Not exposed in the API yet.
   gap check runs at commit, so a range can be split in one transaction. Use
   `QuotationDriverAgeFactorRepository.findByAge(age)` to look one up. Seeded by
   `V10__create_quotation_driver_age_factor.sql`.
+- **Charges** (`quotation_charge`, entity `QuotationCharge`): a single row (id 1) with the `adminSurchargeRate`
+  (default 0.05), `issuanceFeeAmount` (default 10.00 USD), `financingSurchargeRate` (default 0.08, 12 installments
+  only) and the IVA `vatRate` (default 0.21). Seeded by `V11__create_quotation_charge.sql`.
 
 Errors use RFC 7807 `application/problem+json`; validation errors include a per-field `errors` map.
 
@@ -176,7 +233,7 @@ com.carinsurance
 ├── common/      cross-cutting config and exception handling
 ├── insured/     insureds and their vehicles (InsuredVehicle → catalog valuation)
 ├── location/    localities by postal code and their pricing zones (read-only reference data)
-├── quotation/   quotation parameters per zone, vehicle type and driver age (quote calculation will live here)
+├── quotation/   quote calculation and its parameters (zone, vehicle type, driver age, charges)
 └── vehicle/     vehicle catalog and valuations (read-only reference data)
 ```
 New domains (policies, claims, ...) should get their own feature package alongside `insured/`.

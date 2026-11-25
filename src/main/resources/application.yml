@@ -14,6 +14,10 @@ app:
     # Imports src/main/resources/data/localidades_cp_maestro.csv on startup when the locality table is empty.
     import-on-startup: true
 
+quotation:
+  # Days a quotation stays valid after its issue date (validUntil in the response).
+  validity-days: 15
+
 management:
   endpoints:
     web:
