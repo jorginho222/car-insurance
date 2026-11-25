@@ -3,8 +3,10 @@ package com.carinsurance.quotation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.carinsurance.common.exception.ResourceNotFoundException;
@@ -13,7 +15,6 @@ import com.carinsurance.location.LocalityRepository;
 import com.carinsurance.location.Zone;
 import com.carinsurance.quotation.dto.QuotationRequest;
 import com.carinsurance.quotation.dto.QuotationResponse;
-import com.carinsurance.quotation.dto.QuotationResponse.PaymentOption;
 import com.carinsurance.quotation.dto.QuotationResponse.PlanQuote;
 import com.carinsurance.vehicle.VehicleCatalog;
 import com.carinsurance.vehicle.VehicleCatalogService;
@@ -22,12 +23,14 @@ import com.carinsurance.vehicle.VehicleType;
 import com.carinsurance.vehicle.VehicleValuation;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -41,6 +44,7 @@ class QuotationServiceTest {
     private static final long VALUATION_ID = 10L;
     private static final long LOCALITY_ID = 20L;
     private static final long ZONE_ID = 2L;
+    private static final long QUOTATION_ID = 30L;
 
     @Mock
     private VehicleCatalogService catalogService;
@@ -60,28 +64,34 @@ class QuotationServiceTest {
     @Mock
     private QuotationChargeRepository chargeRepository;
 
+    @Mock
+    private QuotationRepository repository;
+
     private QuotationService service;
+    private VehicleValuation valuation;
+    private Locality locality;
 
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
         service = new QuotationService(
+                repository,
                 catalogService,
                 localityRepository,
                 vehicleParameterRepository,
                 zoneFactorRepository,
                 driverAgeFactorRepository,
                 chargeRepository,
+                new QuotationMapper(),
                 new QuotationProperties(15),
                 clock);
 
         VehicleCatalog catalog =
                 VehicleCatalogTestData.catalog(1L, "Toyota", "Corolla", "2.0 XEI CVT", VehicleType.CAR);
-        VehicleValuation valuation =
-                VehicleCatalogTestData.valuation(catalog, VALUATION_ID, 2021, "20000.00", LocalDate.of(2026, 1, 1));
+        valuation = VehicleCatalogTestData.valuation(catalog, VALUATION_ID, 2021, "20000.00", LocalDate.of(2026, 1, 1));
         Zone zone = new Zone("GBA");
         zone.setId(ZONE_ID);
-        Locality locality = new Locality("MORON", "Buenos Aires", "1708", zone);
+        locality = new Locality("MORON", "Buenos Aires", "1708", zone);
         locality.setId(LOCALITY_ID);
 
         given(catalogService.getSelectableValuation(VALUATION_ID)).willReturn(valuation);
@@ -108,6 +118,11 @@ class QuotationServiceTest {
                         new BigDecimal("10.00"),
                         new BigDecimal("0.0800"),
                         new BigDecimal("0.2100")));
+        given(repository.save(any(Quotation.class))).willAnswer(invocation -> {
+            Quotation quotation = invocation.getArgument(0);
+            quotation.setId(QUOTATION_ID);
+            return quotation;
+        });
     }
 
     private static QuotationRequest request(LocalDate birthDate) {
@@ -118,6 +133,9 @@ class QuotationServiceTest {
     void quotesEveryPlan() {
         QuotationResponse response = service.quote(request(LocalDate.of(2004, 5, 1)));
 
+        assertThat(response.id()).isEqualTo(QUOTATION_ID);
+        assertThat(response.status()).isEqualTo(QuotationStatus.QUOTED);
+        assertThat(response.quotedAt()).isEqualTo(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC));
         assertThat(response.validUntil()).isEqualTo(LocalDate.of(2026, 12, 10));
         assertThat(response.vehicle().description()).isEqualTo("Toyota Corolla 2.0 XEI CVT");
         assertThat(response.vehicle().year()).isEqualTo(2021);
@@ -169,5 +187,63 @@ class QuotationServiceTest {
         assertThatThrownBy(() -> service.quote(request(LocalDate.of(1990, 1, 1))))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Locality");
+    }
+
+    @Test
+    void storesTheQuotationWithEveryPlan() {
+        LocalDate birthDate = LocalDate.of(2004, 5, 1);
+
+        service.quote(request(birthDate));
+
+        ArgumentCaptor<Quotation> captor = ArgumentCaptor.forClass(Quotation.class);
+        verify(repository).save(captor.capture());
+        Quotation saved = captor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(QuotationStatus.QUOTED);
+        assertThat(saved.getQuotedAt()).isEqualTo(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC));
+        assertThat(saved.getValidUntil()).isEqualTo(LocalDate.of(2026, 12, 10));
+        assertThat(saved.getValuation()).isSameAs(valuation);
+        assertThat(saved.getLocality()).isSameAs(locality);
+        assertThat(saved.getDriverBirthDate()).isEqualTo(birthDate);
+        assertThat(saved.getDriverAge()).isEqualTo(22);
+        assertThat(saved.getPlans())
+                .extracting(QuotationPlan::getName)
+                .containsExactly(Plan.CIVIL_LIABILITY, Plan.THIRD_PARTY_EXTENDED, Plan.FULL_COVERAGE);
+        assertThat(saved.getPlans())
+                .allSatisfy(plan -> assertThat(plan.getQuotation()).isSameAs(saved));
+    }
+
+    @Test
+    void findsAStoredQuotation() {
+        Quotation stored = storedQuotation(TODAY.plusDays(3));
+        given(repository.findDetailedById(QUOTATION_ID)).willReturn(Optional.of(stored));
+
+        QuotationResponse response = service.findById(QUOTATION_ID);
+
+        assertThat(response.id()).isEqualTo(QUOTATION_ID);
+        assertThat(response.status()).isEqualTo(QuotationStatus.QUOTED);
+        assertThat(response.risk().driverAge()).isEqualTo(40);
+    }
+
+    @Test
+    void storedQuotationPastItsValidUntilIsReportedExpired() {
+        given(repository.findDetailedById(QUOTATION_ID)).willReturn(Optional.of(storedQuotation(TODAY.minusDays(1))));
+
+        assertThat(service.findById(QUOTATION_ID).status()).isEqualTo(QuotationStatus.EXPIRED);
+    }
+
+    @Test
+    void unknownQuotationIsNotFound() {
+        given(repository.findDetailedById(anyLong())).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findById(99L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Quotation");
+    }
+
+    private Quotation storedQuotation(LocalDate validUntil) {
+        Quotation quotation = new Quotation(
+                Instant.parse("2026-11-01T10:00:00Z"), validUntil, valuation, locality, LocalDate.of(1986, 1, 1), 40);
+        quotation.setId(QUOTATION_ID);
+        return quotation;
     }
 }

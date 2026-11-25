@@ -17,6 +17,8 @@ app:
 quotation:
   # Days a quotation stays valid after its issue date (validUntil in the response).
   validity-days: 15
+  # When to mark quotations past their valid-until date as EXPIRED (daily at 00:05).
+  expiration-cron: "0 5 0 * * *"
 
 management:
   endpoints:

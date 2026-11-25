@@ -6,21 +6,19 @@ import com.carinsurance.location.LocalityRepository;
 import com.carinsurance.location.Zone;
 import com.carinsurance.quotation.dto.QuotationRequest;
 import com.carinsurance.quotation.dto.QuotationResponse;
-import com.carinsurance.quotation.dto.QuotationResponse.PlanQuote;
-import com.carinsurance.vehicle.VehicleCatalog;
 import com.carinsurance.vehicle.VehicleCatalogService;
+import com.carinsurance.vehicle.VehicleType;
 import com.carinsurance.vehicle.VehicleValuation;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Calculates a quotation for every plan. Nothing is stored. */
+/** Quotes every plan and stores the quotation. */
 @Service
 @Transactional(readOnly = true)
 public class QuotationService {
@@ -28,36 +26,45 @@ public class QuotationService {
     static final int MINIMUM_DRIVER_AGE = 18;
 
     private static final String LOCALITY = "Locality";
+    private static final String QUOTATION = "Quotation";
 
+    private final QuotationRepository repository;
     private final VehicleCatalogService catalogService;
     private final LocalityRepository localityRepository;
     private final QuotationVehicleParameterRepository vehicleParameterRepository;
     private final QuotationZoneFactorRepository zoneFactorRepository;
     private final QuotationDriverAgeFactorRepository driverAgeFactorRepository;
     private final QuotationChargeRepository chargeRepository;
+    private final QuotationMapper mapper;
     private final QuotationProperties properties;
     private final Clock clock;
 
     public QuotationService(
+            QuotationRepository repository,
             VehicleCatalogService catalogService,
             LocalityRepository localityRepository,
             QuotationVehicleParameterRepository vehicleParameterRepository,
             QuotationZoneFactorRepository zoneFactorRepository,
             QuotationDriverAgeFactorRepository driverAgeFactorRepository,
             QuotationChargeRepository chargeRepository,
+            QuotationMapper mapper,
             QuotationProperties properties,
             Clock clock) {
+        this.repository = repository;
         this.catalogService = catalogService;
         this.localityRepository = localityRepository;
         this.vehicleParameterRepository = vehicleParameterRepository;
         this.zoneFactorRepository = zoneFactorRepository;
         this.driverAgeFactorRepository = driverAgeFactorRepository;
         this.chargeRepository = chargeRepository;
+        this.mapper = mapper;
         this.properties = properties;
         this.clock = clock;
     }
 
+    @Transactional
     public QuotationResponse quote(QuotationRequest request) {
+        Instant now = Instant.now(clock);
         LocalDate today = LocalDate.now(clock);
         int driverAge = Period.between(request.birthDate(), today).getYears();
         if (driverAge < MINIMUM_DRIVER_AGE) {
@@ -65,15 +72,15 @@ public class QuotationService {
         }
 
         VehicleValuation valuation = catalogService.getSelectableValuation(request.valuationId());
-        VehicleCatalog catalog = valuation.getCatalog();
+        VehicleType vehicleType = valuation.getCatalog().getVehicleType();
         Locality locality = localityRepository
                 .findWithZoneById(request.localityId())
                 .orElseThrow(() -> new ResourceNotFoundException(LOCALITY, request.localityId()));
         Zone zone = locality.getZone();
 
         QuotationVehicleParameter vehicleParameter = vehicleParameterRepository
-                .findByVehicleType(catalog.getVehicleType())
-                .orElseThrow(() -> missing("vehicle parameter for vehicle type " + catalog.getVehicleType()));
+                .findByVehicleType(vehicleType)
+                .orElseThrow(() -> missing("vehicle parameter for vehicle type " + vehicleType));
         QuotationZoneFactor zoneFactor = zoneFactorRepository
                 .findByZoneId(zone.getId())
                 .orElseThrow(() -> missing("zone factor for zone " + zone.getName()));
@@ -84,27 +91,19 @@ public class QuotationService {
 
         Map<CoverageType, BigDecimal> premiums =
                 PremiumCalculator.coveragePremiums(valuation.getValue(), vehicleParameter, zoneFactor, ageFactor);
-        List<PlanQuote> plans = Arrays.stream(Plan.values())
-                .map(plan -> PremiumCalculator.planQuote(plan, premiums, charge))
-                .toList();
+        Quotation quotation = new Quotation(
+                now, today.plusDays(properties.validityDays()), valuation, locality, request.birthDate(), driverAge);
+        for (Plan plan : Plan.values()) {
+            quotation.addPlan(PremiumCalculator.planQuote(plan, premiums, charge));
+        }
 
-        return new QuotationResponse(
-                today.plusDays(properties.validityDays()),
-                new QuotationResponse.Vehicle(
-                        "%s %s %s".formatted(catalog.getMake(), catalog.getModel(), catalog.getModelVersion()),
-                        catalog.getMake(),
-                        catalog.getModel(),
-                        catalog.getModelVersion(),
-                        valuation.getYear(),
-                        catalog.getVehicleType(),
-                        valuation.getValue()),
-                new QuotationResponse.Risk(
-                        locality.getPostalCode(),
-                        locality.getName(),
-                        locality.getProvince(),
-                        zone.getName(),
-                        driverAge),
-                plans);
+        return mapper.toResponse(repository.save(quotation), today);
+    }
+
+    public QuotationResponse findById(Long id) {
+        Quotation quotation =
+                repository.findDetailedById(id).orElseThrow(() -> new ResourceNotFoundException(QUOTATION, id));
+        return mapper.toResponse(quotation, LocalDate.now(clock));
     }
 
     private static IllegalStateException missing(String what) {

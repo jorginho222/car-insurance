@@ -4,9 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.carinsurance.location.Zone;
-import com.carinsurance.quotation.dto.QuotationResponse.Coverage;
-import com.carinsurance.quotation.dto.QuotationResponse.PaymentOption;
-import com.carinsurance.quotation.dto.QuotationResponse.PlanQuote;
 import com.carinsurance.vehicle.VehicleType;
 import java.math.BigDecimal;
 import java.util.Map;
@@ -31,15 +28,16 @@ class PremiumCalculatorTest {
                 new BigDecimal("0.2100"));
     }
 
-    private static PlanQuote quote(Plan plan) {
+    private static QuotationPlan quote(Plan plan) {
         return PremiumCalculator.planQuote(
                 plan, PremiumCalculator.coveragePremiums(SUM_INSURED, CAR, GBA, AGE_21_24), charge("10.00"));
     }
 
     @Test
     void premiumsOfEveryCoverage() {
-        // liability: 200 x 1.20 x 1.35; theft: 20000 x 0.004 x 1.60 (no age factor); damage: 20000 x 0.015 x 1.10 x
-        // 1.40
+        // liability: 200 x 1.20 x 1.35
+        // theft: 20000 x 0.004 x 1.60 (no age factor)
+        // damage: 20000 x 0.015 x 1.10 x 1.40
         assertThat(PremiumCalculator.coveragePremiums(SUM_INSURED, CAR, GBA, AGE_21_24))
                 .isEqualTo(Map.of(
                         CoverageType.LIABILITY, new BigDecimal("324.00"),
@@ -49,35 +47,36 @@ class PremiumCalculatorTest {
 
     @Test
     void civilLiabilityOnlyHasLiability() {
-        PlanQuote quote = quote(Plan.CIVIL_LIABILITY);
+        QuotationPlan quote = quote(Plan.CIVIL_LIABILITY);
 
-        assertThat(quote.name()).isEqualTo(Plan.CIVIL_LIABILITY);
-        assertThat(quote.coverages()).containsExactly(new Coverage(CoverageType.LIABILITY, new BigDecimal("324.00")));
-        assertThat(quote.netPremium()).isEqualByComparingTo("324.00");
+        assertThat(quote.getName()).isEqualTo(Plan.CIVIL_LIABILITY);
+        assertThat(quote.getCoverages())
+                .containsExactly(new PlanCoverage(CoverageType.LIABILITY, new BigDecimal("324.00")));
+        assertThat(quote.getNetPremium()).isEqualByComparingTo("324.00");
     }
 
     @Test
     void thirdPartyExtendedAddsTheft() {
-        PlanQuote quote = quote(Plan.THIRD_PARTY_EXTENDED);
+        QuotationPlan quote = quote(Plan.THIRD_PARTY_EXTENDED);
 
-        assertThat(quote.coverages())
+        assertThat(quote.getCoverages())
                 .containsExactly(
-                        new Coverage(CoverageType.LIABILITY, new BigDecimal("324.00")),
-                        new Coverage(CoverageType.THEFT, new BigDecimal("128.00")));
-        assertThat(quote.netPremium()).isEqualByComparingTo("452.00");
+                        new PlanCoverage(CoverageType.LIABILITY, new BigDecimal("324.00")),
+                        new PlanCoverage(CoverageType.THEFT, new BigDecimal("128.00")));
+        assertThat(quote.getNetPremium()).isEqualByComparingTo("452.00");
     }
 
     @Test
     void fullCoverageAddsDamage() {
-        PlanQuote quote = quote(Plan.FULL_COVERAGE);
+        QuotationPlan quote = quote(Plan.FULL_COVERAGE);
 
-        assertThat(quote.coverages())
+        assertThat(quote.getCoverages())
                 .containsExactly(
-                        new Coverage(CoverageType.LIABILITY, new BigDecimal("324.00")),
-                        new Coverage(CoverageType.THEFT, new BigDecimal("128.00")),
-                        new Coverage(CoverageType.DAMAGE, new BigDecimal("462.00")));
-        assertThat(quote.netPremium()).isEqualByComparingTo("914.00");
-        assertThat(quote.paymentOptions())
+                        new PlanCoverage(CoverageType.LIABILITY, new BigDecimal("324.00")),
+                        new PlanCoverage(CoverageType.THEFT, new BigDecimal("128.00")),
+                        new PlanCoverage(CoverageType.DAMAGE, new BigDecimal("462.00")));
+        assertThat(quote.getNetPremium()).isEqualByComparingTo("914.00");
+        assertThat(quote.getPaymentOptions())
                 .extracting(PaymentOption::installments, PaymentOption::totalPremium)
                 .containsExactly(tuple(1, new BigDecimal("1173.34")), tuple(12, new BigDecimal("1267.21")));
     }

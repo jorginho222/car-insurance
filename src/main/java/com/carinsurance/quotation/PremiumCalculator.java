@@ -1,8 +1,5 @@
 package com.carinsurance.quotation;
 
-import com.carinsurance.quotation.dto.QuotationResponse.Coverage;
-import com.carinsurance.quotation.dto.QuotationResponse.PaymentOption;
-import com.carinsurance.quotation.dto.QuotationResponse.PlanQuote;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.EnumMap;
@@ -35,19 +32,19 @@ final class PremiumCalculator {
     }
 
     /** The plan's coverages (in the plan's order), net premium and payment options. */
-    static PlanQuote planQuote(Plan plan, Map<CoverageType, BigDecimal> premiums, QuotationCharge charge) {
-        List<Coverage> coverages = plan.getCoverages().stream()
-                .map(type -> new Coverage(type, premiums.get(type)))
+    static QuotationPlan planQuote(Plan plan, Map<CoverageType, BigDecimal> premiums, QuotationCharge charge) {
+        List<PlanCoverage> coverages = plan.getCoverages().stream()
+                .map(type -> new PlanCoverage(type, premiums.get(type)))
                 .toList();
         BigDecimal netPremium = netPremium(coverages);
         List<PaymentOption> paymentOptions = INSTALLMENT_OPTIONS.stream()
                 .map(installments -> paymentOption(netPremium, installments, charge))
                 .toList();
-        return new PlanQuote(plan, coverages, netPremium, paymentOptions);
+        return new QuotationPlan(plan, coverages, netPremium, paymentOptions);
     }
 
-    static BigDecimal netPremium(List<Coverage> coverages) {
-        return coverages.stream().map(Coverage::premium).reduce(BigDecimal.ZERO, BigDecimal::add);
+    static BigDecimal netPremium(List<PlanCoverage> coverages) {
+        return coverages.stream().map(PlanCoverage::premium).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /**

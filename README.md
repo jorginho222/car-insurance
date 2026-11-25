@@ -152,12 +152,13 @@ Response item:
   Mendoza, Mar del Plata and Neuquén are `Ciudades grandes del interior`; everything else is `Resto del país`.
 
 ### Quotations
-Quotes every plan at once so they can be compared. Nothing is stored. The client picks the vehicle with the catalog
-cascade (ending at a valuation) and the locality with the postal code lookup, then sends:
+Quotes every plan at once so they can be compared, and stores the quotation. The client picks the vehicle with the
+catalog cascade (ending at a valuation) and the locality with the postal code lookup, then sends:
 
 | Method | Path | Success | Errors |
 |---|---|---|---|
-| POST | `/api/v1/quotations` | 200 | 400 validation / valuation not current, 404 valuation or locality, 422 driver under 18 |
+| POST | `/api/v1/quotations` | 201 + `Location` | 400 validation / valuation not current, 404 valuation or locality, 422 driver under 18 |
+| GET | `/api/v1/quotations/{id}` | 200 | 404 |
 
 ```json
 { "valuationId": 455, "birthDate": "2004-05-01", "localityId": 812 }
@@ -165,9 +166,12 @@ cascade (ending at a valuation) and the locality with the postal code lookup, th
 `birthDate` must be in the past. The response has one entry in `plans` per plan, in this order: `CIVIL_LIABILITY`,
 `THIRD_PARTY_EXTENDED`, `FULL_COVERAGE`.
 
-Response (CAR worth 20,000 USD, GBA, driver aged 22):
+Response (CAR worth 20,000 USD, GBA, driver aged 22). GET returns the same shape:
 ```json
 {
+  "id": 42,
+  "status": "QUOTED",
+  "quotedAt": "2026-11-25T13:00:00Z",
   "validUntil": "2026-12-10",
   "vehicle": { "description": "Toyota Corolla 2.0 XEI CVT", "make": "Toyota", "model": "Corolla",
                "modelVersion": "2.0 XEI CVT", "year": 2021, "vehicleType": "CAR", "sumInsured": 20000.00 },
@@ -218,7 +222,15 @@ Calculation (`PremiumCalculator`):
   exactly. The installment amount is the total ÷ installments rounded down; the first installment takes the leftover
   cents.
 - Driver age = completed years at the issue date. Under 18 → 422 `Driver under age`.
-- `validUntil` = issue date + `quotation.validity-days` (`application.yml`, default 15).
+- `validUntil` = issue date + `quotation.validity-days` (`application.yml`, default 15). It is the last valid day.
+
+Storage and status:
+- Tables: `quotation` (quotedAt, validUntil, status, valuation, locality, driver birth date and age),
+  `quotation_plan` (plan name, net premium, and `payment_options` as JSONB) and `quotation_plan_coverage` (the
+  coverage type and premium of each plan, in plan order). Created by `V12__create_quotation.sql`.
+- `status` is `QUOTED` when issued, `ACCEPTED` once a policy is created from it (coming with policies) and
+  `EXPIRED` once `validUntil` has passed. Reads report a `QUOTED` quotation past `validUntil` as `EXPIRED` right away;
+  `QuotationExpirationJob` also updates the stored rows every night (`quotation.expiration-cron`, default 00:05).
 
 ### Quotation parameters
 Reference data used by the quotation calculation. Not exposed in the API.
@@ -248,7 +260,7 @@ com.carinsurance
 ├── common/      cross-cutting config and exception handling
 ├── insured/     insureds and their vehicles (InsuredVehicle → catalog valuation)
 ├── location/    localities by postal code and their pricing zones (read-only reference data)
-├── quotation/   quote calculation and its parameters (zone, vehicle type, driver age, charges)
+├── quotation/   stored quotations, their calculation and parameters (zone, vehicle type, driver age, charges)
 └── vehicle/     vehicle catalog and valuations (read-only reference data)
 ```
 New domains (policies, claims, ...) should get their own feature package alongside `insured/`.

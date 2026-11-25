@@ -1,6 +1,9 @@
 package com.carinsurance.quotation;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -13,6 +16,7 @@ import com.carinsurance.vehicle.VehicleCatalogTestData;
 import com.carinsurance.vehicle.VehicleType;
 import com.carinsurance.vehicle.VehicleValuation;
 import com.carinsurance.vehicle.VehicleValuationRepository;
+import com.jayway.jsonpath.JsonPath;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +25,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 /**
  * Runs against the seeded quotation parameters (V8–V11) and localities, with a valuation created by the test so the
@@ -49,6 +55,12 @@ class QuotationIntegrationTest {
     private VehicleValuation valuation;
     private Locality gbaLocality;
 
+    @Autowired
+    private QuotationExpirationJob expirationJob;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @BeforeEach
     void setUp() {
         VehicleCatalogTestData data = new VehicleCatalogTestData(catalogRepository, valuationRepository);
@@ -74,11 +86,23 @@ class QuotationIntegrationTest {
      *   12 installments: financing 77.58, base 1047.28, vat 219.93, total 1267.21 = 105.61 + 11 x 105.60
      */
     @Test
-    void quotesEveryPlan() throws Exception {
+    void storesTheQuotationOfEveryPlan() throws Exception {
         LocalDate today = LocalDate.now();
 
-        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body(today.minusYears(22))))
+        MvcResult created = mockMvc.perform(
+                        post(BASE).contentType(MediaType.APPLICATION_JSON).content(body(today.minusYears(22))))
+                .andExpect(status().isCreated())
+                .andExpect(header().exists("Location"))
+                .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.status").value("QUOTED"))
+                .andExpect(jsonPath("$.quotedAt").isNotEmpty())
+                .andExpect(jsonPath("$.plans[2].paymentOptions[1].totalPremium").value(1267.21))
+                .andReturn();
+
+        // read it back: every amount, including the JSON payment options, survives the round trip
+        mockMvc.perform(get(created.getResponse().getHeader("Location")))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("QUOTED"))
                 .andExpect(jsonPath("$.validUntil").value(today.plusDays(15).toString()))
                 .andExpect(jsonPath("$.vehicle.model").value("Alpha"))
                 .andExpect(jsonPath("$.vehicle.year").value(2021))
@@ -133,5 +157,52 @@ class QuotationIntegrationTest {
 
         mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void quotationPastItsValidUntilReadsExpiredAndTheJobStoresIt() throws Exception {
+        long id = createQuotation();
+        jdbcTemplate.update(
+                "UPDATE quotation SET valid_until = ? WHERE id = ?",
+                LocalDate.now().minusDays(1),
+                id);
+
+        mockMvc.perform(get(BASE + "/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXPIRED"));
+        assertThat(storedStatus(id)).isEqualTo("QUOTED");
+
+        expirationJob.expireQuotations();
+
+        assertThat(storedStatus(id)).isEqualTo("EXPIRED");
+    }
+
+    @Test
+    void jobLeavesQuotationsStillValid() throws Exception {
+        long id = createQuotation();
+
+        expirationJob.expireQuotations();
+
+        assertThat(storedStatus(id)).isEqualTo("QUOTED");
+    }
+
+    @Test
+    void unknownQuotationIsNotFound() throws Exception {
+        mockMvc.perform(get(BASE + "/999999999")).andExpect(status().isNotFound());
+    }
+
+    private long createQuotation() throws Exception {
+        String response = mockMvc.perform(post(BASE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(LocalDate.now().minusYears(30))))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return ((Number) JsonPath.read(response, "$.id")).longValue();
+    }
+
+    private String storedStatus(long id) {
+        return jdbcTemplate.queryForObject("SELECT status FROM quotation WHERE id = ?", String.class, id);
     }
 }

@@ -108,3 +108,6 @@ Content-Type: application/json
   "birthDate": "2004-05-01",
   "localityId": 2378
 }
+
+### Get quotation by id (status is EXPIRED once validUntil has passed)
+GET http://localhost:8080/api/v1/quotations/1
