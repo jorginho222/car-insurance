@@ -13,13 +13,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
-/** Runs against the factors seeded by migration V8. */
+/** Runs against the factors seeded by migration V8 (table renamed in V9). */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
-class QuotationFactorRepositoryIntegrationTest {
+class QuotationZoneFactorRepositoryIntegrationTest {
 
     @Autowired
-    private QuotationFactorRepository repository;
+    private QuotationZoneFactorRepository repository;
 
     @Autowired
     private ZoneRepository zoneRepository;
@@ -38,13 +38,13 @@ class QuotationFactorRepositoryIntegrationTest {
         Zone gba = zoneRepository.findByName("GBA").orElseThrow();
 
         assertThatThrownBy(() -> repository.saveAndFlush(
-                        new QuotationFactor(gba, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE)))
+                        new QuotationZoneFactor(gba, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private void assertFactors(String zoneName, String civilLiability, String theft, String damage) {
         Zone zone = zoneRepository.findByName(zoneName).orElseThrow();
-        QuotationFactor factor = repository.findByZoneId(zone.getId()).orElseThrow();
+        QuotationZoneFactor factor = repository.findByZoneId(zone.getId()).orElseThrow();
         assertThat(factor.getCivilLiability()).isEqualByComparingTo(civilLiability);
         assertThat(factor.getTheft()).isEqualByComparingTo(theft);
         assertThat(factor.getDamage()).isEqualByComparingTo(damage);
