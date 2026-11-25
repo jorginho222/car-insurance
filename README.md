@@ -152,17 +152,18 @@ Response item:
   Mendoza, Mar del Plata and Neuquén are `Ciudades grandes del interior`; everything else is `Resto del país`.
 
 ### Quotations
-Calculates a quote. Nothing is stored. The client picks the vehicle with the catalog cascade (ending at a valuation)
-and the locality with the postal code lookup, then sends:
+Quotes every plan at once so they can be compared. Nothing is stored. The client picks the vehicle with the catalog
+cascade (ending at a valuation) and the locality with the postal code lookup, then sends:
 
 | Method | Path | Success | Errors |
 |---|---|---|---|
 | POST | `/api/v1/quotations` | 200 | 400 validation / valuation not current, 404 valuation or locality, 422 driver under 18 |
 
 ```json
-{ "plan": "FULL_COVERAGE", "valuationId": 455, "birthDate": "2004-05-01", "localityId": 812 }
+{ "valuationId": 455, "birthDate": "2004-05-01", "localityId": 812 }
 ```
-`plan` is `CIVIL_LIABILITY`, `THIRD_PARTY_EXTENDED` or `FULL_COVERAGE`. `birthDate` must be in the past.
+`birthDate` must be in the past. The response has one entry in `plans` per plan, in this order: `CIVIL_LIABILITY`,
+`THIRD_PARTY_EXTENDED`, `FULL_COVERAGE`.
 
 Response (CAR worth 20,000 USD, GBA, driver aged 22):
 ```json
@@ -171,23 +172,37 @@ Response (CAR worth 20,000 USD, GBA, driver aged 22):
   "vehicle": { "description": "Toyota Corolla 2.0 XEI CVT", "make": "Toyota", "model": "Corolla",
                "modelVersion": "2.0 XEI CVT", "year": 2021, "vehicleType": "CAR", "sumInsured": 20000.00 },
   "risk": { "postalCode": "1602", "locality": "FLORIDA", "province": "Buenos Aires", "zone": "GBA", "driverAge": 22 },
-  "plan": {
-    "name": "FULL_COVERAGE",
-    "coverages": [
-      { "type": "LIABILITY", "premium": 324.00 },
-      { "type": "THEFT", "premium": 128.00 },
-      { "type": "DAMAGE", "premium": 462.00 }
-    ],
-    "netPremium": 914.00,
-    "paymentOptions": [
-      { "installments": 1, "adminSurcharge": 45.70, "issuanceFee": 10.00, "financingSurcharge": 0.00,
-        "taxableBase": 969.70, "vat": 203.64, "totalPremium": 1173.34,
-        "firstInstallment": 1173.34, "installmentAmount": 1173.34 },
-      { "installments": 12, "adminSurcharge": 45.70, "issuanceFee": 10.00, "financingSurcharge": 77.58,
-        "taxableBase": 1047.28, "vat": 219.93, "totalPremium": 1267.21,
-        "firstInstallment": 105.61, "installmentAmount": 105.60 }
-    ]
-  }
+  "plans": [
+    {
+      "name": "CIVIL_LIABILITY",
+      "coverages": [ { "type": "LIABILITY", "premium": 324.00 } ],
+      "netPremium": 324.00,
+      "paymentOptions": [ { "installments": 1, ... }, { "installments": 12, ... } ]
+    },
+    {
+      "name": "THIRD_PARTY_EXTENDED",
+      "coverages": [ { "type": "LIABILITY", "premium": 324.00 }, { "type": "THEFT", "premium": 128.00 } ],
+      "netPremium": 452.00,
+      "paymentOptions": [ { "installments": 1, ... }, { "installments": 12, ... } ]
+    },
+    {
+      "name": "FULL_COVERAGE",
+      "coverages": [
+        { "type": "LIABILITY", "premium": 324.00 },
+        { "type": "THEFT", "premium": 128.00 },
+        { "type": "DAMAGE", "premium": 462.00 }
+      ],
+      "netPremium": 914.00,
+      "paymentOptions": [
+        { "installments": 1, "adminSurcharge": 45.70, "issuanceFee": 10.00, "financingSurcharge": 0.00,
+          "taxableBase": 969.70, "vat": 203.64, "totalPremium": 1173.34,
+          "firstInstallment": 1173.34, "installmentAmount": 1173.34 },
+        { "installments": 12, "adminSurcharge": 45.70, "issuanceFee": 10.00, "financingSurcharge": 77.58,
+          "taxableBase": 1047.28, "vat": 219.93, "totalPremium": 1267.21,
+          "firstInstallment": 105.61, "installmentAmount": 105.60 }
+      ]
+    }
+  ]
 }
 ```
 Calculation (`PremiumCalculator`):

@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Calculates a quotation for a plan, a vehicle valuation, a driver birth date and a locality. Nothing is stored. */
+/** Quotes every plan for a vehicle valuation, a driver birth date and a locality. Nothing is stored. */
 @RestController
 @RequestMapping("/api/v1/quotations")
 public class QuotationController {

@@ -6,8 +6,7 @@ import com.carinsurance.location.LocalityRepository;
 import com.carinsurance.location.Zone;
 import com.carinsurance.quotation.dto.QuotationRequest;
 import com.carinsurance.quotation.dto.QuotationResponse;
-import com.carinsurance.quotation.dto.QuotationResponse.Coverage;
-import com.carinsurance.quotation.dto.QuotationResponse.PaymentOption;
+import com.carinsurance.quotation.dto.QuotationResponse.PlanQuote;
 import com.carinsurance.vehicle.VehicleCatalog;
 import com.carinsurance.vehicle.VehicleCatalogService;
 import com.carinsurance.vehicle.VehicleValuation;
@@ -15,11 +14,13 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Calculates a quotation. Nothing is stored. */
+/** Calculates a quotation for every plan. Nothing is stored. */
 @Service
 @Transactional(readOnly = true)
 public class QuotationService {
@@ -81,11 +82,10 @@ public class QuotationService {
                 .orElseThrow(() -> missing("driver age factor for age " + driverAge));
         QuotationCharge charge = chargeRepository.getCurrent();
 
-        List<Coverage> coverages = PremiumCalculator.coverages(
-                request.plan(), valuation.getValue(), vehicleParameter, zoneFactor, ageFactor);
-        BigDecimal netPremium = PremiumCalculator.netPremium(coverages);
-        List<PaymentOption> paymentOptions = PremiumCalculator.INSTALLMENT_OPTIONS.stream()
-                .map(installments -> PremiumCalculator.paymentOption(netPremium, installments, charge))
+        Map<CoverageType, BigDecimal> premiums =
+                PremiumCalculator.coveragePremiums(valuation.getValue(), vehicleParameter, zoneFactor, ageFactor);
+        List<PlanQuote> plans = Arrays.stream(Plan.values())
+                .map(plan -> PremiumCalculator.planQuote(plan, premiums, charge))
                 .toList();
 
         return new QuotationResponse(
@@ -104,7 +104,7 @@ public class QuotationService {
                         locality.getProvince(),
                         zone.getName(),
                         driverAge),
-                new QuotationResponse.PlanQuote(request.plan(), coverages, netPremium, paymentOptions));
+                plans);
     }
 
     private static IllegalStateException missing(String what) {

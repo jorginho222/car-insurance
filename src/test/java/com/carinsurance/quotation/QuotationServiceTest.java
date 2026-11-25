@@ -2,6 +2,7 @@ package com.carinsurance.quotation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -12,6 +13,8 @@ import com.carinsurance.location.LocalityRepository;
 import com.carinsurance.location.Zone;
 import com.carinsurance.quotation.dto.QuotationRequest;
 import com.carinsurance.quotation.dto.QuotationResponse;
+import com.carinsurance.quotation.dto.QuotationResponse.PaymentOption;
+import com.carinsurance.quotation.dto.QuotationResponse.PlanQuote;
 import com.carinsurance.vehicle.VehicleCatalog;
 import com.carinsurance.vehicle.VehicleCatalogService;
 import com.carinsurance.vehicle.VehicleCatalogTestData;
@@ -107,13 +110,13 @@ class QuotationServiceTest {
                         new BigDecimal("0.2100")));
     }
 
-    private static QuotationRequest request(Plan plan, LocalDate birthDate) {
-        return new QuotationRequest(plan, VALUATION_ID, birthDate, LOCALITY_ID);
+    private static QuotationRequest request(LocalDate birthDate) {
+        return new QuotationRequest(VALUATION_ID, birthDate, LOCALITY_ID);
     }
 
     @Test
-    void quotesFullCoverage() {
-        QuotationResponse response = service.quote(request(Plan.FULL_COVERAGE, LocalDate.of(2004, 5, 1)));
+    void quotesEveryPlan() {
+        QuotationResponse response = service.quote(request(LocalDate.of(2004, 5, 1)));
 
         assertThat(response.validUntil()).isEqualTo(LocalDate.of(2026, 12, 10));
         assertThat(response.vehicle().description()).isEqualTo("Toyota Corolla 2.0 XEI CVT");
@@ -121,34 +124,39 @@ class QuotationServiceTest {
         assertThat(response.vehicle().vehicleType()).isEqualTo(VehicleType.CAR);
         assertThat(response.vehicle().sumInsured()).isEqualByComparingTo("20000.00");
         assertThat(response.risk()).isEqualTo(new QuotationResponse.Risk("1708", "MORON", "Buenos Aires", "GBA", 22));
-        assertThat(response.plan().name()).isEqualTo(Plan.FULL_COVERAGE);
-        assertThat(response.plan().coverages()).hasSize(3);
-        assertThat(response.plan().netPremium()).isEqualByComparingTo("914.00");
-        assertThat(response.plan().paymentOptions())
-                .extracting(QuotationResponse.PaymentOption::installments)
-                .containsExactly(1, 12);
-        assertThat(response.plan().paymentOptions().get(0).totalPremium()).isEqualByComparingTo("1173.34");
-        assertThat(response.plan().paymentOptions().get(1).totalPremium()).isEqualByComparingTo("1267.21");
+        assertThat(response.plans())
+                .extracting(PlanQuote::name, quote -> quote.coverages().size(), PlanQuote::netPremium)
+                .containsExactly(
+                        tuple(Plan.CIVIL_LIABILITY, 1, new BigDecimal("324.00")),
+                        tuple(Plan.THIRD_PARTY_EXTENDED, 2, new BigDecimal("452.00")),
+                        tuple(Plan.FULL_COVERAGE, 3, new BigDecimal("914.00")));
+        assertThat(response.plans())
+                .allSatisfy(quote -> assertThat(quote.paymentOptions())
+                        .extracting(PaymentOption::installments)
+                        .containsExactly(1, 12));
+        PlanQuote fullCoverage = response.plans().get(2);
+        assertThat(fullCoverage.paymentOptions().get(0).totalPremium()).isEqualByComparingTo("1173.34");
+        assertThat(fullCoverage.paymentOptions().get(1).totalPremium()).isEqualByComparingTo("1267.21");
     }
 
     @Test
     void driverAgeIsCompletedYearsAtTheIssueDate() {
         // turns 23 tomorrow
-        QuotationResponse response = service.quote(request(Plan.CIVIL_LIABILITY, LocalDate.of(2003, 11, 26)));
+        QuotationResponse response = service.quote(request(LocalDate.of(2003, 11, 26)));
 
         assertThat(response.risk().driverAge()).isEqualTo(22);
     }
 
     @Test
     void driverTurningEighteenTodayIsAccepted() {
-        QuotationResponse response = service.quote(request(Plan.CIVIL_LIABILITY, LocalDate.of(2008, 11, 25)));
+        QuotationResponse response = service.quote(request(LocalDate.of(2008, 11, 25)));
 
         assertThat(response.risk().driverAge()).isEqualTo(18);
     }
 
     @Test
     void driverUnderEighteenIsRejected() {
-        assertThatThrownBy(() -> service.quote(request(Plan.CIVIL_LIABILITY, LocalDate.of(2008, 11, 26))))
+        assertThatThrownBy(() -> service.quote(request(LocalDate.of(2008, 11, 26))))
                 .isInstanceOf(UnderAgeDriverException.class)
                 .hasMessage("Driver must be at least 18 years old (age: 17)");
         verifyNoInteractions(catalogService, localityRepository);
@@ -158,7 +166,7 @@ class QuotationServiceTest {
     void unknownLocalityIsNotFound() {
         given(localityRepository.findWithZoneById(anyLong())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.quote(request(Plan.CIVIL_LIABILITY, LocalDate.of(1990, 1, 1))))
+        assertThatThrownBy(() -> service.quote(request(LocalDate.of(1990, 1, 1))))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Locality");
     }

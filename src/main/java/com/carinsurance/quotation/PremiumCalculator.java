@@ -2,9 +2,12 @@ package com.carinsurance.quotation;
 
 import com.carinsurance.quotation.dto.QuotationResponse.Coverage;
 import com.carinsurance.quotation.dto.QuotationResponse.PaymentOption;
+import com.carinsurance.quotation.dto.QuotationResponse.PlanQuote;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The premium arithmetic of a quotation, without any lookups. Every amount it returns is rounded to cents (HALF_UP),
@@ -18,16 +21,29 @@ final class PremiumCalculator {
 
     private PremiumCalculator() {}
 
-    /** The premium of each coverage in the plan, in the plan's coverage order. */
-    static List<Coverage> coverages(
-            Plan plan,
+    /** The premium of every coverage. Plans pick theirs from this map with {@link #planQuote}. */
+    static Map<CoverageType, BigDecimal> coveragePremiums(
             BigDecimal sumInsured,
             QuotationVehicleParameter vehicle,
             QuotationZoneFactor zone,
             QuotationDriverAgeFactor age) {
-        return plan.getCoverages().stream()
-                .map(type -> new Coverage(type, premium(type, sumInsured, vehicle, zone, age)))
+        Map<CoverageType, BigDecimal> premiums = new EnumMap<>(CoverageType.class);
+        for (CoverageType type : CoverageType.values()) {
+            premiums.put(type, premium(type, sumInsured, vehicle, zone, age));
+        }
+        return premiums;
+    }
+
+    /** The plan's coverages (in the plan's order), net premium and payment options. */
+    static PlanQuote planQuote(Plan plan, Map<CoverageType, BigDecimal> premiums, QuotationCharge charge) {
+        List<Coverage> coverages = plan.getCoverages().stream()
+                .map(type -> new Coverage(type, premiums.get(type)))
                 .toList();
+        BigDecimal netPremium = netPremium(coverages);
+        List<PaymentOption> paymentOptions = INSTALLMENT_OPTIONS.stream()
+                .map(installments -> paymentOption(netPremium, installments, charge))
+                .toList();
+        return new PlanQuote(plan, coverages, netPremium, paymentOptions);
     }
 
     static BigDecimal netPremium(List<Coverage> coverages) {

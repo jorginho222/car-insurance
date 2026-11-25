@@ -7,7 +7,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-public record QuotationResponse(LocalDate validUntil, Vehicle vehicle, Risk risk, PlanQuote plan) {
+/** A quotation for every plan, in {@code Plan} order. */
+public record QuotationResponse(LocalDate validUntil, Vehicle vehicle, Risk risk, List<PlanQuote> plans) {
 
     public record Vehicle(
             String description,

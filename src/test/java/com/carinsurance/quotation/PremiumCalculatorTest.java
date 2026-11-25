@@ -1,13 +1,15 @@
 package com.carinsurance.quotation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.carinsurance.location.Zone;
 import com.carinsurance.quotation.dto.QuotationResponse.Coverage;
 import com.carinsurance.quotation.dto.QuotationResponse.PaymentOption;
+import com.carinsurance.quotation.dto.QuotationResponse.PlanQuote;
 import com.carinsurance.vehicle.VehicleType;
 import java.math.BigDecimal;
-import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class PremiumCalculatorTest {
@@ -29,37 +31,55 @@ class PremiumCalculatorTest {
                 new BigDecimal("0.2100"));
     }
 
-    @Test
-    void civilLiabilityOnlyHasLiability() {
-        List<Coverage> coverages = PremiumCalculator.coverages(Plan.CIVIL_LIABILITY, SUM_INSURED, CAR, GBA, AGE_21_24);
-
-        // 200 x 1.20 x 1.35
-        assertThat(coverages).containsExactly(new Coverage(CoverageType.LIABILITY, new BigDecimal("324.00")));
+    private static PlanQuote quote(Plan plan) {
+        return PremiumCalculator.planQuote(
+                plan, PremiumCalculator.coveragePremiums(SUM_INSURED, CAR, GBA, AGE_21_24), charge("10.00"));
     }
 
     @Test
-    void thirdPartyExtendedAddsTheftWithoutAgeFactor() {
-        List<Coverage> coverages =
-                PremiumCalculator.coverages(Plan.THIRD_PARTY_EXTENDED, SUM_INSURED, CAR, GBA, AGE_21_24);
+    void premiumsOfEveryCoverage() {
+        // liability: 200 x 1.20 x 1.35; theft: 20000 x 0.004 x 1.60 (no age factor); damage: 20000 x 0.015 x 1.10 x
+        // 1.40
+        assertThat(PremiumCalculator.coveragePremiums(SUM_INSURED, CAR, GBA, AGE_21_24))
+                .isEqualTo(Map.of(
+                        CoverageType.LIABILITY, new BigDecimal("324.00"),
+                        CoverageType.THEFT, new BigDecimal("128.00"),
+                        CoverageType.DAMAGE, new BigDecimal("462.00")));
+    }
 
-        // theft: 20000 x 0.004 x 1.60
-        assertThat(coverages)
+    @Test
+    void civilLiabilityOnlyHasLiability() {
+        PlanQuote quote = quote(Plan.CIVIL_LIABILITY);
+
+        assertThat(quote.name()).isEqualTo(Plan.CIVIL_LIABILITY);
+        assertThat(quote.coverages()).containsExactly(new Coverage(CoverageType.LIABILITY, new BigDecimal("324.00")));
+        assertThat(quote.netPremium()).isEqualByComparingTo("324.00");
+    }
+
+    @Test
+    void thirdPartyExtendedAddsTheft() {
+        PlanQuote quote = quote(Plan.THIRD_PARTY_EXTENDED);
+
+        assertThat(quote.coverages())
                 .containsExactly(
                         new Coverage(CoverageType.LIABILITY, new BigDecimal("324.00")),
                         new Coverage(CoverageType.THEFT, new BigDecimal("128.00")));
+        assertThat(quote.netPremium()).isEqualByComparingTo("452.00");
     }
 
     @Test
     void fullCoverageAddsDamage() {
-        List<Coverage> coverages = PremiumCalculator.coverages(Plan.FULL_COVERAGE, SUM_INSURED, CAR, GBA, AGE_21_24);
+        PlanQuote quote = quote(Plan.FULL_COVERAGE);
 
-        // damage: 20000 x 0.015 x 1.10 x 1.40
-        assertThat(coverages)
+        assertThat(quote.coverages())
                 .containsExactly(
                         new Coverage(CoverageType.LIABILITY, new BigDecimal("324.00")),
                         new Coverage(CoverageType.THEFT, new BigDecimal("128.00")),
                         new Coverage(CoverageType.DAMAGE, new BigDecimal("462.00")));
-        assertThat(PremiumCalculator.netPremium(coverages)).isEqualByComparingTo("914.00");
+        assertThat(quote.netPremium()).isEqualByComparingTo("914.00");
+        assertThat(quote.paymentOptions())
+                .extracting(PaymentOption::installments, PaymentOption::totalPremium)
+                .containsExactly(tuple(1, new BigDecimal("1173.34")), tuple(12, new BigDecimal("1267.21")));
     }
 
     @Test
@@ -68,10 +88,8 @@ class PremiumCalculatorTest {
         QuotationVehicleParameter vehicle = new QuotationVehicleParameter(
                 VehicleType.CAR, new BigDecimal("123.45"), new BigDecimal("0.0040"), new BigDecimal("0.0150"));
 
-        List<Coverage> coverages =
-                PremiumCalculator.coverages(Plan.CIVIL_LIABILITY, SUM_INSURED, vehicle, GBA, AGE_21_24);
-
-        assertThat(coverages.getFirst().premium()).isEqualTo(new BigDecimal("199.99"));
+        assertThat(PremiumCalculator.coveragePremiums(SUM_INSURED, vehicle, GBA, AGE_21_24))
+                .containsEntry(CoverageType.LIABILITY, new BigDecimal("199.99"));
     }
 
     @Test

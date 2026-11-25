@@ -33,10 +33,9 @@ class QuotationControllerTest {
     @MockitoBean
     private QuotationService service;
 
-    private static String body(String plan, String birthDate) {
+    private static String body(String birthDate) {
         return """
-                {"plan": %s, "valuationId": 10, "birthDate": %s, "localityId": 20}""".formatted(
-                        plan == null ? "null" : '"' + plan + '"', birthDate == null ? "null" : '"' + birthDate + '"');
+                {"valuationId": 10, "birthDate": "%s", "localityId": 20}""".formatted(birthDate);
     }
 
     @Test
@@ -54,7 +53,7 @@ class QuotationControllerTest {
                                 VehicleType.CAR,
                                 new BigDecimal("20000.00")),
                         new QuotationResponse.Risk("1708", "MORON", "Buenos Aires", "GBA", 22),
-                        new QuotationResponse.PlanQuote(
+                        List.of(new QuotationResponse.PlanQuote(
                                 Plan.CIVIL_LIABILITY,
                                 List.of(new Coverage(CoverageType.LIABILITY, new BigDecimal("324.00"))),
                                 new BigDecimal("324.00"),
@@ -67,11 +66,9 @@ class QuotationControllerTest {
                                         new BigDecimal("73.54"),
                                         total,
                                         total,
-                                        total)))));
+                                        total))))));
 
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body("CIVIL_LIABILITY", "2004-05-01")))
+        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body("2004-05-01")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validUntil").value("2026-12-10"))
                 .andExpect(jsonPath("$.vehicle.description").value("Toyota Corolla 2.0 XEI CVT"))
@@ -79,18 +76,17 @@ class QuotationControllerTest {
                 .andExpect(jsonPath("$.vehicle.sumInsured").value(20000.00))
                 .andExpect(jsonPath("$.risk.zone").value("GBA"))
                 .andExpect(jsonPath("$.risk.driverAge").value(22))
-                .andExpect(jsonPath("$.plan.name").value("CIVIL_LIABILITY"))
-                .andExpect(jsonPath("$.plan.coverages[0].type").value("LIABILITY"))
-                .andExpect(jsonPath("$.plan.netPremium").value(324.00))
-                .andExpect(jsonPath("$.plan.paymentOptions[0].installments").value(1))
-                .andExpect(jsonPath("$.plan.paymentOptions[0].totalPremium").value(1173.34));
+                .andExpect(jsonPath("$.plans[0].name").value("CIVIL_LIABILITY"))
+                .andExpect(jsonPath("$.plans[0].coverages[0].type").value("LIABILITY"))
+                .andExpect(jsonPath("$.plans[0].netPremium").value(324.00))
+                .andExpect(jsonPath("$.plans[0].paymentOptions[0].installments").value(1))
+                .andExpect(jsonPath("$.plans[0].paymentOptions[0].totalPremium").value(1173.34));
     }
 
     @Test
     void missingFieldsReturn400() throws Exception {
         mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors.plan").exists())
                 .andExpect(jsonPath("$.errors.valuationId").exists())
                 .andExpect(jsonPath("$.errors.birthDate").exists())
                 .andExpect(jsonPath("$.errors.localityId").exists());
@@ -98,20 +94,17 @@ class QuotationControllerTest {
     }
 
     @Test
-    void unknownPlanReturns400() throws Exception {
-        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body("GOLD", "1990-01-01")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors.plan")
-                        .value("must be one of [CIVIL_LIABILITY, THIRD_PARTY_EXTENDED, FULL_COVERAGE]"));
-        verifyNoInteractions(service);
+    void planInRequestIsIgnored() throws Exception {
+        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("""
+                                {"plan": "GOLD", "valuationId": 10, "birthDate": "1990-01-01", "localityId": 20}"""))
+                .andExpect(status().isOk());
     }
 
     @Test
     void futureBirthDateReturns400() throws Exception {
         mockMvc.perform(post(BASE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(
-                                "FULL_COVERAGE", LocalDate.now().plusDays(1).toString())))
+                        .content(body(LocalDate.now().plusDays(1).toString())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.birthDate").exists());
         verifyNoInteractions(service);
@@ -121,7 +114,7 @@ class QuotationControllerTest {
     void underAgeDriverReturns422() throws Exception {
         given(service.quote(any(QuotationRequest.class))).willThrow(new UnderAgeDriverException(17, 18));
 
-        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body("FULL_COVERAGE", "2009-01-01")))
+        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body("2009-01-01")))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.title").value("Driver under age"))
                 .andExpect(jsonPath("$.detail").value("Driver must be at least 18 years old (age: 17)"));
