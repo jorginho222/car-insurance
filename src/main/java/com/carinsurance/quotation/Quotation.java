@@ -25,7 +25,8 @@ import java.util.List;
 
 /**
  * A stored quotation: every plan quoted for a vehicle valuation, a locality and a driver. It is valid through
- * {@link #getValidUntil()} (inclusive).
+ * {@link #getValidUntil()} (inclusive). It is identified to people by its {@link #getCode() code} and belongs to the
+ * {@link #getEmail() email} entered when it was requested.
  */
 @Entity
 @Table(name = "quotation")
@@ -34,6 +35,14 @@ public class Quotation {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** Correlative code such as {@code Q-2026-000123}, see {@link QuotationCodeGenerator}. */
+    @Column(nullable = false, unique = true, updatable = false, length = 20)
+    private String code;
+
+    /** Entered when requesting the quotation; stored trimmed and lower-cased. */
+    @Column(nullable = false, updatable = false, length = 255)
+    private String email;
 
     @Column(name = "quoted_at", nullable = false, updatable = false)
     private Instant quotedAt;
@@ -70,12 +79,16 @@ public class Quotation {
 
     /** A new quotation, in status {@link QuotationStatus#QUOTED}. */
     public Quotation(
+            String code,
+            String email,
             Instant quotedAt,
             LocalDate validUntil,
             VehicleValuation valuation,
             Locality locality,
             LocalDate driverBirthDate,
             int driverAge) {
+        this.code = code;
+        this.email = email;
         this.quotedAt = quotedAt;
         this.validUntil = validUntil;
         this.status = QuotationStatus.QUOTED;
@@ -104,6 +117,14 @@ public class Quotation {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getCode() {
+        return code;
+    }
+
+    public String getEmail() {
+        return email;
     }
 
     public Instant getQuotedAt() {

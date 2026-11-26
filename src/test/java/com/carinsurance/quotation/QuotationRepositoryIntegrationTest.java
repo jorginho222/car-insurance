@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,6 +76,8 @@ class QuotationRepositoryIntegrationTest {
 
     private Quotation newQuotation(LocalDate validUntil) {
         Quotation quotation = new Quotation(
+                "T-" + UUID.randomUUID().toString().substring(0, 16),
+                "driver@example.com",
                 Instant.now().truncatedTo(ChronoUnit.MICROS),
                 validUntil,
                 valuation,

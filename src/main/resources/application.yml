@@ -5,6 +5,10 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        # Loads lazy collections (e.g. the plans of a page of quotations) in batches instead of one query per row.
+        default_batch_fetch_size: 50
   flyway:
     enabled: true
     locations: classpath:db/migration

@@ -18,6 +18,8 @@ public class QuotationMapper {
         Locality locality = quotation.getLocality();
         return new QuotationResponse(
                 quotation.getId(),
+                quotation.getCode(),
+                quotation.getEmail(),
                 quotation.statusOn(today),
                 quotation.getQuotedAt(),
                 quotation.getValidUntil(),

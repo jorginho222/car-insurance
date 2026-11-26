@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import com.carinsurance.common.exception.InvalidRequestException;
 import com.carinsurance.common.exception.ResourceNotFoundException;
 import com.carinsurance.location.Locality;
 import com.carinsurance.location.LocalityRepository;
@@ -26,6 +27,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -67,6 +73,9 @@ class QuotationServiceTest {
     @Mock
     private QuotationRepository repository;
 
+    @Mock
+    private QuotationCodeGenerator codeGenerator;
+
     private QuotationService service;
     private VehicleValuation valuation;
     private Locality locality;
@@ -82,6 +91,7 @@ class QuotationServiceTest {
                 zoneFactorRepository,
                 driverAgeFactorRepository,
                 chargeRepository,
+                codeGenerator,
                 new QuotationMapper(),
                 new QuotationProperties(15),
                 clock);
@@ -118,6 +128,7 @@ class QuotationServiceTest {
                         new BigDecimal("10.00"),
                         new BigDecimal("0.0800"),
                         new BigDecimal("0.2100")));
+        given(codeGenerator.next(2026)).willReturn("Q-2026-000123");
         given(repository.save(any(Quotation.class))).willAnswer(invocation -> {
             Quotation quotation = invocation.getArgument(0);
             quotation.setId(QUOTATION_ID);
@@ -126,7 +137,7 @@ class QuotationServiceTest {
     }
 
     private static QuotationRequest request(LocalDate birthDate) {
-        return new QuotationRequest(VALUATION_ID, birthDate, LOCALITY_ID);
+        return new QuotationRequest(VALUATION_ID, birthDate, LOCALITY_ID, "  Driver@Example.COM ");
     }
 
     @Test
@@ -134,6 +145,8 @@ class QuotationServiceTest {
         QuotationResponse response = service.quote(request(LocalDate.of(2004, 5, 1)));
 
         assertThat(response.id()).isEqualTo(QUOTATION_ID);
+        assertThat(response.code()).isEqualTo("Q-2026-000123");
+        assertThat(response.email()).isEqualTo("driver@example.com");
         assertThat(response.status()).isEqualTo(QuotationStatus.QUOTED);
         assertThat(response.quotedAt()).isEqualTo(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC));
         assertThat(response.validUntil()).isEqualTo(LocalDate.of(2026, 12, 10));
@@ -177,7 +190,7 @@ class QuotationServiceTest {
         assertThatThrownBy(() -> service.quote(request(LocalDate.of(2008, 11, 26))))
                 .isInstanceOf(UnderAgeDriverException.class)
                 .hasMessage("Driver must be at least 18 years old (age: 17)");
-        verifyNoInteractions(catalogService, localityRepository);
+        verifyNoInteractions(catalogService, localityRepository, codeGenerator);
     }
 
     @Test
@@ -198,6 +211,8 @@ class QuotationServiceTest {
         ArgumentCaptor<Quotation> captor = ArgumentCaptor.forClass(Quotation.class);
         verify(repository).save(captor.capture());
         Quotation saved = captor.getValue();
+        assertThat(saved.getCode()).isEqualTo("Q-2026-000123");
+        assertThat(saved.getEmail()).isEqualTo("driver@example.com");
         assertThat(saved.getStatus()).isEqualTo(QuotationStatus.QUOTED);
         assertThat(saved.getQuotedAt()).isEqualTo(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC));
         assertThat(saved.getValidUntil()).isEqualTo(LocalDate.of(2026, 12, 10));
@@ -240,9 +255,54 @@ class QuotationServiceTest {
                 .hasMessageContaining("Quotation");
     }
 
+    @Test
+    void searchesByEmailIgnoringCaseAndSpaces() {
+        Pageable pageable = PageRequest.of(0, 20);
+        given(repository.findOpenByEmail("driver@example.com", TODAY, pageable))
+                .willReturn(new PageImpl<>(List.of(storedQuotation(TODAY)), pageable, 1));
+
+        Page<QuotationResponse> page = service.search(" Driver@Example.com ", null, pageable);
+
+        assertThat(page.getContent()).singleElement().satisfies(response -> {
+            assertThat(response.code()).isEqualTo("Q-2026-000007");
+            assertThat(response.status()).isEqualTo(QuotationStatus.QUOTED);
+        });
+    }
+
+    @Test
+    void searchesByCodeIgnoringCaseAndSpaces() {
+        Pageable pageable = PageRequest.of(0, 20);
+        given(repository.findOpenByCode("Q-2026-000007", TODAY, pageable)).willReturn(Page.empty(pageable));
+
+        service.search(null, " q-2026-000007 ", pageable);
+
+        verify(repository).findOpenByCode("Q-2026-000007", TODAY, pageable);
+    }
+
+    @Test
+    void searchWithBothEmailAndCodeIsRejected() {
+        assertThatThrownBy(() -> service.search("driver@example.com", "Q-2026-000007", PageRequest.of(0, 20)))
+                .isInstanceOf(InvalidRequestException.class);
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void searchWithoutEmailOrCodeIsRejected() {
+        assertThatThrownBy(() -> service.search(" ", null, PageRequest.of(0, 20)))
+                .isInstanceOf(InvalidRequestException.class);
+        verifyNoInteractions(repository);
+    }
+
     private Quotation storedQuotation(LocalDate validUntil) {
         Quotation quotation = new Quotation(
-                Instant.parse("2026-11-01T10:00:00Z"), validUntil, valuation, locality, LocalDate.of(1986, 1, 1), 40);
+                "Q-2026-000007",
+                "driver@example.com",
+                Instant.parse("2026-11-01T10:00:00Z"),
+                validUntil,
+                valuation,
+                locality,
+                LocalDate.of(1986, 1, 1),
+                40);
         quotation.setId(QUOTATION_ID);
         return quotation;
     }
