@@ -159,17 +159,20 @@ catalog cascade (ending at a valuation) and the locality with the postal code lo
 |---|---|---|---|
 | POST | `/api/v1/quotations` | 201 + `Location` | 400 validation / valuation not current, 404 valuation or locality, 422 driver under 18 |
 | GET | `/api/v1/quotations/{id}` | 200 | 404 |
+| GET | `/api/v1/quotations?email=&page=&size=&sort=` or `?code=` | 200 (paged) | 400 neither or both of `email` / `code`, invalid `email` |
 
 ```json
-{ "valuationId": 455, "birthDate": "2004-05-01", "localityId": 812 }
+{ "valuationId": 455, "birthDate": "2004-05-01", "localityId": 812, "email": "driver@example.com" }
 ```
-`birthDate` must be in the past. The response has one entry in `plans` per plan, in this order: `CIVIL_LIABILITY`,
+`birthDate` must be in the past. `email` is required (max 255) and is stored trimmed and lower-cased. The response has one entry in `plans` per plan, in this order: `CIVIL_LIABILITY`,
 `THIRD_PARTY_EXTENDED`, `FULL_COVERAGE`.
 
 Response (CAR worth 20,000 USD, GBA, driver aged 22). GET returns the same shape:
 ```json
 {
   "id": 42,
+  "code": "Q-2026-000123",
+  "email": "driver@example.com",
   "status": "QUOTED",
   "quotedAt": "2026-11-25T13:00:00Z",
   "validUntil": "2026-12-10",
@@ -209,6 +212,22 @@ Response (CAR worth 20,000 USD, GBA, driver aged 22). GET returns the same shape
   ]
 }
 ```
+Code:
+- Every quotation gets a `code` such as `Q-2026-000123`: `Q-`, the issue year, and a correlative number padded to
+  6 digits. The number **restarts at 1 every year** (first quotation of 2027 is `Q-2027-000001`). Codes are unique.
+- `QuotationCodeGenerator` takes the next number from `quotation_code_counter` (one row per year) inside the
+  quoting transaction. Concurrent quotations get distinct numbers, and a failed quotation gives its number back, so
+  there are no gaps.
+
+Search (`GET /api/v1/quotations`):
+- Filters by `email` **or** by `code`: exactly one is required (none or both → 400). Matched ignoring case and
+  surrounding spaces. No match → empty page.
+- Only **open** quotations are returned: status `QUOTED` and `validUntil` today or later. Expired (stored or past
+  `validUntil` but not yet updated by the job) and accepted quotations are left out; `GET /{id}` still returns them.
+- Default order: grouped by vehicle (`valuation.id` ascending), newest first within each vehicle
+  (`quotedAt` descending); default page size 20. Override with `sort=`, e.g. `sort=quotedAt,desc`.
+- Each item has the same shape as `GET /api/v1/quotations/{id}` (its `status` is always `QUOTED`).
+
 Calculation (`PremiumCalculator`):
 - Coverage premiums, by plan (each plan includes the previous one):
   - `CIVIL_LIABILITY`: LIABILITY = `civilLiabilityBaseAmount` × zone `civilLiability` × age `civilLiability`
@@ -225,9 +244,11 @@ Calculation (`PremiumCalculator`):
 - `validUntil` = issue date + `quotation.validity-days` (`application.yml`, default 15). It is the last valid day.
 
 Storage and status:
-- Tables: `quotation` (quotedAt, validUntil, status, valuation, locality, driver birth date and age),
+- Tables: `quotation` (code, email, quotedAt, validUntil, status, valuation, locality, driver birth date and age),
   `quotation_plan` (plan name, net premium, and `payment_options` as JSONB) and `quotation_plan_coverage` (the
   coverage type and premium of each plan, in plan order). Created by `V12__create_quotation.sql`.
+  `V13__add_quotation_code_and_email.sql` adds `code` and `email` and the `quotation_code_counter` table (and deletes
+  the quotations stored before it, which had no email).
 - `status` is `QUOTED` when issued, `ACCEPTED` once a policy is created from it (coming with policies) and
   `EXPIRED` once `validUntil` has passed. Reads report a `QUOTED` quotation past `validUntil` as `EXPIRED` right away;
   `QuotationExpirationJob` also updates the stored rows every night (`quotation.expiration-cron`, default 00:05).

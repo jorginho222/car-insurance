@@ -13,6 +13,8 @@ import java.util.List;
 /** A stored quotation for every plan, in {@code Plan} order. */
 public record QuotationResponse(
         Long id,
+        String code,
+        String email,
         QuotationStatus status,
         Instant quotedAt,
         LocalDate validUntil,

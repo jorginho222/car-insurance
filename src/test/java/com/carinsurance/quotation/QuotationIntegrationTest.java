@@ -1,6 +1,7 @@
 package com.carinsurance.quotation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -18,6 +19,7 @@ import com.carinsurance.vehicle.VehicleValuation;
 import com.carinsurance.vehicle.VehicleValuationRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.time.LocalDate;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,8 +77,16 @@ class QuotationIntegrationTest {
     }
 
     private String body(LocalDate birthDate) {
+        return body(valuation, birthDate, "driver@example.com");
+    }
+
+    private String body(VehicleValuation valuation, LocalDate birthDate, String email) {
         return """
-                {"valuationId": %d, "birthDate": "%s", "localityId": %d}""".formatted(valuation.getId(), birthDate, gbaLocality.getId());
+                {"valuationId": %d, "birthDate": "%s", "localityId": %d, "email": "%s"}""".formatted(valuation.getId(), birthDate, gbaLocality.getId(), email);
+    }
+
+    private static String uniqueEmail() {
+        return "driver-" + UUID.randomUUID() + "@example.com";
     }
 
     /*
@@ -94,6 +104,8 @@ class QuotationIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Location"))
                 .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.code").value(matchesPattern("Q-" + today.getYear() + "-\\d{6}")))
+                .andExpect(jsonPath("$.email").value("driver@example.com"))
                 .andExpect(jsonPath("$.status").value("QUOTED"))
                 .andExpect(jsonPath("$.quotedAt").isNotEmpty())
                 .andExpect(jsonPath("$.plans[2].paymentOptions[1].totalPremium").value(1267.21))
@@ -153,7 +165,7 @@ class QuotationIntegrationTest {
     @Test
     void unknownLocalityIsNotFound() throws Exception {
         String body = """
-                {"valuationId": %d, "birthDate": "1990-01-01", "localityId": 999999999}""".formatted(valuation.getId());
+                {"valuationId": %d, "birthDate": "1990-01-01", "localityId": 999999999, "email": "a@example.com"}""".formatted(valuation.getId());
 
         mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isNotFound());
@@ -187,6 +199,92 @@ class QuotationIntegrationTest {
     }
 
     @Test
+    void consecutiveQuotationsGetConsecutiveCodes() throws Exception {
+        String first = createdCode(valuation, uniqueEmail());
+        String second = createdCode(valuation, uniqueEmail());
+
+        assertThat(number(second)).isEqualTo(number(first) + 1);
+    }
+
+    @Test
+    void searchByEmailIsGroupedByVehicleAndNewestFirst() throws Exception {
+        VehicleCatalogTestData data = new VehicleCatalogTestData(catalogRepository, valuationRepository);
+        VehicleValuation otherValuation = data.saveValuation(
+                data.saveCatalog(VehicleCatalogTestData.uniqueMake(), "Beta", "1.6", VehicleType.CAR),
+                2022,
+                "15000.00",
+                LocalDate.now().minusDays(10));
+        String email = uniqueEmail();
+        // interleaved, so the order can only come from the sort
+        String firstOther = createdCode(otherValuation, email);
+        String first = createdCode(valuation, email);
+        String secondOther = createdCode(otherValuation, email);
+        String second = createdCode(valuation, email);
+        createdCode(valuation, uniqueEmail()); // someone else's
+
+        mockMvc.perform(get(BASE).param("email", email.toUpperCase()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(4))
+                .andExpect(jsonPath("$.content[0].code").value(second))
+                .andExpect(jsonPath("$.content[1].code").value(first))
+                .andExpect(jsonPath("$.content[2].code").value(secondOther))
+                .andExpect(jsonPath("$.content[3].code").value(firstOther))
+                .andExpect(jsonPath("$.content[3].vehicle.model").value("Beta"))
+                .andExpect(jsonPath("$.content[3].plans.length()").value(3));
+    }
+
+    @Test
+    void searchByCodeFindsThatQuotation() throws Exception {
+        String email = uniqueEmail();
+        String code = createdCode(valuation, email);
+        createdCode(valuation, email);
+
+        mockMvc.perform(get(BASE).param("code", code.toLowerCase()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].code").value(code))
+                .andExpect(jsonPath("$.content[0].email").value(email));
+    }
+
+    @Test
+    void searchOnlyFindsQuotedQuotationsStillValid() throws Exception {
+        String email = uniqueEmail();
+        String lastDay = createdCode(valuation, email);
+        String expiredByDate = createdCode(valuation, email);
+        String expired = createdCode(valuation, email);
+        String accepted = createdCode(valuation, email);
+        jdbcTemplate.update("UPDATE quotation SET valid_until = ? WHERE code = ?", LocalDate.now(), lastDay);
+        jdbcTemplate.update(
+                "UPDATE quotation SET valid_until = ? WHERE code = ?",
+                LocalDate.now().minusDays(1),
+                expiredByDate);
+        jdbcTemplate.update("UPDATE quotation SET status = 'EXPIRED' WHERE code = ?", expired);
+        jdbcTemplate.update("UPDATE quotation SET status = 'ACCEPTED' WHERE code = ?", accepted);
+
+        mockMvc.perform(get(BASE).param("email", email))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].code").value(lastDay))
+                .andExpect(jsonPath("$.content[0].status").value("QUOTED"));
+        for (String code : new String[] {expiredByDate, expired, accepted}) {
+            mockMvc.perform(get(BASE).param("code", code))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(0));
+        }
+    }
+
+    @Test
+    void searchWithoutEmailOrCodeIsRejected() throws Exception {
+        mockMvc.perform(get(BASE)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void searchWithBothEmailAndCodeIsRejected() throws Exception {
+        mockMvc.perform(get(BASE).param("email", "driver@example.com").param("code", "Q-2026-000001"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void unknownQuotationIsNotFound() throws Exception {
         mockMvc.perform(get(BASE + "/999999999")).andExpect(status().isNotFound());
     }
@@ -200,6 +298,21 @@ class QuotationIntegrationTest {
                 .getResponse()
                 .getContentAsString();
         return ((Number) JsonPath.read(response, "$.id")).longValue();
+    }
+
+    private String createdCode(VehicleValuation valuation, String email) throws Exception {
+        String response = mockMvc.perform(post(BASE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(valuation, LocalDate.now().minusYears(30), email)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return JsonPath.read(response, "$.code");
+    }
+
+    private static long number(String code) {
+        return Long.parseLong(code.substring(code.lastIndexOf('-') + 1));
     }
 
     private String storedStatus(long id) {

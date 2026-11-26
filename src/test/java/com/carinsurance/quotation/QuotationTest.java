@@ -15,7 +15,14 @@ class QuotationTest {
 
     private static Quotation quotation() {
         return new Quotation(
-                Instant.parse("2026-11-25T13:00:00Z"), VALID_UNTIL, null, null, LocalDate.of(1990, 1, 1), 36);
+                "Q-2026-000001",
+                "driver@example.com",
+                Instant.parse("2026-11-25T13:00:00Z"),
+                VALID_UNTIL,
+                null,
+                null,
+                LocalDate.of(1990, 1, 1),
+                36);
     }
 
     @Test

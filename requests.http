@@ -106,8 +106,15 @@ Content-Type: application/json
 {
   "valuationId": 503,
   "birthDate": "2004-05-01",
-  "localityId": 2378
+  "localityId": 2378,
+  "email": "driver@example.com"
 }
 
 ### Get quotation by id (status is EXPIRED once validUntil has passed)
 GET http://localhost:8080/api/v1/quotations/1
+
+### Search quotations by email (grouped by vehicle, newest first)
+GET http://localhost:8080/api/v1/quotations?email=driver@example.com
+
+### Search quotations by code
+GET http://localhost:8080/api/v1/quotations?code=Q-2026-000001
