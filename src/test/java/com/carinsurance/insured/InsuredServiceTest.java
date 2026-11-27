@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verify;
 
 import com.carinsurance.common.exception.DuplicateResourceException;
 import com.carinsurance.common.exception.ResourceNotFoundException;
-import com.carinsurance.insured.dto.InsuredRequest;
 import com.carinsurance.insured.dto.InsuredResponse;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,26 +31,24 @@ class InsuredServiceTest {
     }
 
     @Test
-    void createPersistsAndNormalizesEmail() {
-        InsuredRequest request = InsuredTestData.request("DOC-1", "Jane@Example.com");
-        given(repository.saveAndFlush(any(Insured.class))).willAnswer(inv -> {
-            Insured i = inv.getArgument(0);
-            i.setId(1L);
-            return i;
-        });
+    void createPersistsNormalizedValues() {
+        given(repository.saveAndFlush(any(Insured.class))).willAnswer(inv -> inv.getArgument(0));
 
-        InsuredResponse response = service.create(request);
+        Insured insured = service.create(InsuredTestData.newInsured(" DOC-1 ", " Jane@Example.com "));
 
-        assertThat(response.id()).isEqualTo(1L);
-        assertThat(response.email()).isEqualTo("jane@example.com");
-        assertThat(response.address().city()).isEqualTo("Springfield");
+        assertThat(insured.getFirstName()).isEqualTo("Jane");
+        assertThat(insured.getDocumentNumber()).isEqualTo("DOC-1");
+        assertThat(insured.getEmail()).isEqualTo("jane@example.com");
+        assertThat(insured.getAddress().getStreet()).isEqualTo("Av. Rivadavia 1234");
+        assertThat(insured.getAddress().getLocality()).isEqualTo("FLORIDA");
+        assertThat(insured.getAddress().getProvince()).isEqualTo("Buenos Aires");
     }
 
     @Test
     void createRejectsDuplicateDocument() {
         given(repository.existsByDocumentNumber("DOC-1")).willReturn(true);
 
-        assertThatThrownBy(() -> service.create(InsuredTestData.request("DOC-1", "a@b.com")))
+        assertThatThrownBy(() -> service.create(InsuredTestData.newInsured(" DOC-1", "a@b.com")))
                 .isInstanceOf(DuplicateResourceException.class)
                 .hasMessageContaining("document number");
         verify(repository, never()).saveAndFlush(any());
@@ -61,9 +58,23 @@ class InsuredServiceTest {
     void createRejectsDuplicateEmail() {
         given(repository.existsByEmailIgnoreCase("a@b.com")).willReturn(true);
 
-        assertThatThrownBy(() -> service.create(InsuredTestData.request("DOC-1", "a@b.com")))
+        assertThatThrownBy(() -> service.create(InsuredTestData.newInsured("DOC-1", " A@b.com")))
                 .isInstanceOf(DuplicateResourceException.class)
                 .hasMessageContaining("email");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void findByIdMapsTheInsured() {
+        Insured insured = new InsuredMapper().toEntity(InsuredTestData.newInsured("DOC-1", "a@b.com"));
+        insured.setId(7L);
+        given(repository.findById(7L)).willReturn(Optional.of(insured));
+
+        InsuredResponse response = service.findById(7L);
+
+        assertThat(response.id()).isEqualTo(7L);
+        assertThat(response.address().locality()).isEqualTo("FLORIDA");
+        assertThat(response.address().province()).isEqualTo("Buenos Aires");
     }
 
     @Test
@@ -71,45 +82,5 @@ class InsuredServiceTest {
         given(repository.findById(42L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.findById(42L)).isInstanceOf(ResourceNotFoundException.class);
-    }
-
-    @Test
-    void updateChangesFields() {
-        Insured existing = new InsuredMapper().toEntity(InsuredTestData.request("DOC-1", "a@b.com"));
-        existing.setId(7L);
-        given(repository.findById(7L)).willReturn(Optional.of(existing));
-        given(repository.saveAndFlush(existing)).willReturn(existing);
-
-        InsuredResponse response = service.update(7L, InsuredTestData.request("DOC-2", "new@b.com"));
-
-        assertThat(response.documentNumber()).isEqualTo("DOC-2");
-        assertThat(response.email()).isEqualTo("new@b.com");
-    }
-
-    @Test
-    void updateRejectsEmailOwnedByAnotherInsured() {
-        Insured existing = new InsuredMapper().toEntity(InsuredTestData.request("DOC-1", "a@b.com"));
-        given(repository.findById(7L)).willReturn(Optional.of(existing));
-        given(repository.existsByEmailIgnoreCaseAndIdNot("taken@b.com", 7L)).willReturn(true);
-
-        assertThatThrownBy(() -> service.update(7L, InsuredTestData.request("DOC-1", "taken@b.com")))
-                .isInstanceOf(DuplicateResourceException.class);
-    }
-
-    @Test
-    void deleteRemovesExisting() {
-        Insured existing = new Insured();
-        given(repository.findById(3L)).willReturn(Optional.of(existing));
-
-        service.delete(3L);
-
-        verify(repository).delete(existing);
-    }
-
-    @Test
-    void deleteThrowsWhenMissing() {
-        given(repository.findById(3L)).willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.delete(3L)).isInstanceOf(ResourceNotFoundException.class);
     }
 }

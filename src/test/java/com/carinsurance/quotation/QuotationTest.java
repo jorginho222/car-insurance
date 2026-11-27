@@ -1,8 +1,9 @@
 package com.carinsurance.quotation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.lang.reflect.Field;
+import com.carinsurance.common.exception.ConflictException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -41,9 +42,9 @@ class QuotationTest {
     }
 
     @Test
-    void acceptedStaysAcceptedAfterItsValidUntilDate() throws Exception {
+    void acceptedStaysAcceptedAfterItsValidUntilDate() {
         Quotation quotation = quotation();
-        setStatus(quotation, QuotationStatus.ACCEPTED);
+        quotation.accept(VALID_UNTIL);
 
         assertThat(quotation.statusOn(VALID_UNTIL.plusDays(30))).isEqualTo(QuotationStatus.ACCEPTED);
     }
@@ -59,10 +60,32 @@ class QuotationTest {
         assertThat(plan.getQuotation()).isSameAs(quotation);
     }
 
-    /** There is no way to accept a quotation yet (it comes with policies), so the test sets the field directly. */
-    private static void setStatus(Quotation quotation, QuotationStatus status) throws Exception {
-        Field field = Quotation.class.getDeclaredField("status");
-        field.setAccessible(true);
-        field.set(quotation, status);
+    @Test
+    void quotedCanBeAcceptedThroughItsValidUntilDate() {
+        Quotation quotation = quotation();
+
+        quotation.accept(VALID_UNTIL);
+
+        assertThat(quotation.getStatus()).isEqualTo(QuotationStatus.ACCEPTED);
+    }
+
+    @Test
+    void acceptedCannotBeAcceptedAgain() {
+        Quotation quotation = quotation();
+        quotation.accept(VALID_UNTIL);
+
+        assertThatThrownBy(() -> quotation.accept(VALID_UNTIL))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("ACCEPTED");
+    }
+
+    @Test
+    void quotationPastItsValidUntilDateCannotBeAccepted() {
+        Quotation quotation = quotation();
+
+        assertThatThrownBy(() -> quotation.accept(VALID_UNTIL.plusDays(1)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("EXPIRED");
+        assertThat(quotation.getStatus()).isEqualTo(QuotationStatus.QUOTED);
     }
 }

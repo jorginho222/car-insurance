@@ -68,6 +68,7 @@ class QuotationControllerTest {
                         new BigDecimal("20000.00")),
                 new QuotationResponse.Risk("1708", "MORON", "Buenos Aires", "GBA", 22),
                 List.of(new QuotationResponse.PlanQuote(
+                        31L,
                         Plan.CIVIL_LIABILITY,
                         List.of(new PlanCoverage(CoverageType.LIABILITY, new BigDecimal("324.00"))),
                         new BigDecimal("324.00"),
@@ -101,6 +102,7 @@ class QuotationControllerTest {
                 .andExpect(jsonPath("$.vehicle.sumInsured").value(20000.00))
                 .andExpect(jsonPath("$.risk.zone").value("GBA"))
                 .andExpect(jsonPath("$.risk.driverAge").value(22))
+                .andExpect(jsonPath("$.plans[0].id").value(31))
                 .andExpect(jsonPath("$.plans[0].name").value("CIVIL_LIABILITY"))
                 .andExpect(jsonPath("$.plans[0].coverages[0].type").value("LIABILITY"))
                 .andExpect(jsonPath("$.plans[0].netPremium").value(324.00))

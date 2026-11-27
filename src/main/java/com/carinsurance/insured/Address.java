@@ -3,6 +3,7 @@ package com.carinsurance.insured;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 
+/** The insured's address. Locality, province and postal code match a {@code Locality}. */
 @Embeddable
 public class Address {
 
@@ -10,10 +11,10 @@ public class Address {
     private String street;
 
     @Column(nullable = false, length = 100)
-    private String city;
+    private String locality;
 
     @Column(nullable = false, length = 100)
-    private String state;
+    private String province;
 
     @Column(name = "postal_code", nullable = false, length = 20)
     private String postalCode;
@@ -23,10 +24,10 @@ public class Address {
 
     protected Address() {}
 
-    public Address(String street, String city, String state, String postalCode, String country) {
+    public Address(String street, String locality, String province, String postalCode, String country) {
         this.street = street;
-        this.city = city;
-        this.state = state;
+        this.locality = locality;
+        this.province = province;
         this.postalCode = postalCode;
         this.country = country;
     }
@@ -35,12 +36,12 @@ public class Address {
         return street;
     }
 
-    public String getCity() {
-        return city;
+    public String getLocality() {
+        return locality;
     }
 
-    public String getState() {
-        return state;
+    public String getProvince() {
+        return province;
     }
 
     public String getPostalCode() {

@@ -1,21 +1,10 @@
 package com.carinsurance.insured;
 
-import com.carinsurance.insured.dto.InsuredVehicleRequest;
-
 final class InsuredVehicleTestData {
 
     private InsuredVehicleTestData() {}
 
-    static InsuredVehicleRequest request(Long valuationId, String licensePlate) {
-        return new InsuredVehicleRequest(valuationId, licensePlate);
-    }
-
-    static String json(Long valuationId, String licensePlate) {
-        return """
-                {
-                  "valuationId": %s,
-                  "licensePlate": "%s"
-                }
-                """.formatted(valuationId, licensePlate);
+    static NewInsuredVehicle newVehicle(String licensePlate) {
+        return new NewInsuredVehicle(licensePlate, " eng-12345 ", " 8ap17000000123456 ");
     }
 }

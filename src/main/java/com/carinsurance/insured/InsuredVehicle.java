@@ -38,8 +38,15 @@ public class InsuredVehicle {
     @JoinColumn(name = "valuation_id", nullable = false)
     private VehicleValuation valuation;
 
-    @Column(name = "license_plate", nullable = false, unique = true, length = 20)
+    /** Upper-cased without spaces or hyphens, see {@link InsuredVehicleMapper#normalizePlate(String)}. */
+    @Column(name = "license_plate", nullable = false, length = 20)
     private String licensePlate;
+
+    @Column(name = "engine_number", nullable = false, length = 20)
+    private String engineNumber;
+
+    @Column(name = "chassis_number", nullable = false, length = 17)
+    private String chassisNumber;
 
     @Version
     private Long version;
@@ -64,10 +71,7 @@ public class InsuredVehicle {
         return insured;
     }
 
-    /**
-     * Only meant to be called by {@link Insured#addVehicle(InsuredVehicle)} and
-     * {@link Insured#removeVehicle(InsuredVehicle)}, which keep both sides of the association in sync.
-     */
+    /** Only meant to be called by {@link Insured#addVehicle(InsuredVehicle)}, which keeps both sides in sync. */
     void setInsured(Insured insured) {
         this.insured = insured;
     }
@@ -86,6 +90,22 @@ public class InsuredVehicle {
 
     public void setLicensePlate(String licensePlate) {
         this.licensePlate = licensePlate;
+    }
+
+    public String getEngineNumber() {
+        return engineNumber;
+    }
+
+    public void setEngineNumber(String engineNumber) {
+        this.engineNumber = engineNumber;
+    }
+
+    public String getChassisNumber() {
+        return chassisNumber;
+    }
+
+    public void setChassisNumber(String chassisNumber) {
+        this.chassisNumber = chassisNumber;
     }
 
     public Long getVersion() {

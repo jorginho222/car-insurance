@@ -8,6 +8,8 @@ public record InsuredVehicleResponse(
         Long id,
         Long insuredId,
         String licensePlate,
+        String engineNumber,
+        String chassisNumber,
         VehicleCatalogResponse catalog,
         VehicleValuationResponse valuation,
         Instant createdAt,

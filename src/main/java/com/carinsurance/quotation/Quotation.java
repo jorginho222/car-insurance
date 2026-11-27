@@ -1,5 +1,6 @@
 package com.carinsurance.quotation;
 
+import com.carinsurance.common.exception.ConflictException;
 import com.carinsurance.location.Locality;
 import com.carinsurance.vehicle.VehicleValuation;
 import jakarta.persistence.CascadeType;
@@ -109,6 +110,20 @@ public class Quotation {
      */
     public QuotationStatus statusOn(LocalDate today) {
         return status == QuotationStatus.QUOTED && today.isAfter(validUntil) ? QuotationStatus.EXPIRED : status;
+    }
+
+    /**
+     * Marks the quotation as {@link QuotationStatus#ACCEPTED}, when a policy is created from it.
+     *
+     * @throws ConflictException unless it is {@link QuotationStatus#QUOTED} as of {@code today}
+     */
+    public void accept(LocalDate today) {
+        QuotationStatus current = statusOn(today);
+        if (current != QuotationStatus.QUOTED) {
+            throw new ConflictException(
+                    "Quotation %s is %s; only a QUOTED quotation can become a policy".formatted(code, current));
+        }
+        status = QuotationStatus.ACCEPTED;
     }
 
     public Long getId() {

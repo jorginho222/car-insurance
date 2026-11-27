@@ -1,30 +1,28 @@
 package com.carinsurance.insured;
 
 import com.carinsurance.insured.dto.AddressDto;
-import com.carinsurance.insured.dto.InsuredRequest;
 import com.carinsurance.insured.dto.InsuredResponse;
+import java.util.Locale;
 import org.springframework.stereotype.Component;
 
 @Component
 public class InsuredMapper {
 
-    public Insured toEntity(InsuredRequest request) {
+    /** A new insured with trimmed values and the email lower-cased. */
+    public Insured toEntity(NewInsured data) {
         Insured insured = new Insured();
-        updateEntity(insured, request);
+        insured.setFirstName(data.firstName().trim());
+        insured.setLastName(data.lastName().trim());
+        insured.setDocumentNumber(data.documentNumber().trim());
+        insured.setDateOfBirth(data.dateOfBirth());
+        insured.setEmail(normalizeEmail(data.email()));
+        insured.setPhone(data.phone().trim());
+        Address a = data.address();
+        insured.setAddress(
+                new Address(a.getStreet().trim(), a.getLocality(), a.getProvince(), a.getPostalCode(), a.getCountry()));
+        insured.setLicenseNumber(data.licenseNumber().trim());
+        insured.setLicenseIssueDate(data.licenseIssueDate());
         return insured;
-    }
-
-    public void updateEntity(Insured insured, InsuredRequest request) {
-        insured.setFirstName(request.firstName().trim());
-        insured.setLastName(request.lastName().trim());
-        insured.setDocumentNumber(request.documentNumber().trim());
-        insured.setDateOfBirth(request.dateOfBirth());
-        insured.setEmail(request.email().trim().toLowerCase());
-        insured.setPhone(request.phone().trim());
-        AddressDto a = request.address();
-        insured.setAddress(new Address(a.street(), a.city(), a.state(), a.postalCode(), a.country()));
-        insured.setLicenseNumber(request.licenseNumber().trim());
-        insured.setLicenseIssueDate(request.licenseIssueDate());
     }
 
     public InsuredResponse toResponse(Insured insured) {
@@ -37,10 +35,14 @@ public class InsuredMapper {
                 insured.getDateOfBirth(),
                 insured.getEmail(),
                 insured.getPhone(),
-                new AddressDto(a.getStreet(), a.getCity(), a.getState(), a.getPostalCode(), a.getCountry()),
+                new AddressDto(a.getStreet(), a.getLocality(), a.getProvince(), a.getPostalCode(), a.getCountry()),
                 insured.getLicenseNumber(),
                 insured.getLicenseIssueDate(),
                 insured.getCreatedAt(),
                 insured.getUpdatedAt());
+    }
+
+    public static String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

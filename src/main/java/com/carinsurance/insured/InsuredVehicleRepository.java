@@ -13,8 +13,4 @@ public interface InsuredVehicleRepository extends JpaRepository<InsuredVehicle, 
 
     @EntityGraph(attributePaths = {"valuation", "valuation.catalog"})
     Page<InsuredVehicle> findByInsuredId(Long insuredId, Pageable pageable);
-
-    boolean existsByLicensePlate(String licensePlate);
-
-    boolean existsByLicensePlateAndIdNot(String licensePlate, Long id);
 }

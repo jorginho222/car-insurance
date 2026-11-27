@@ -39,6 +39,7 @@ public class QuotationMapper {
                         quotation.getDriverAge()),
                 quotation.getPlans().stream()
                         .map(plan -> new QuotationResponse.PlanQuote(
+                                plan.getId(),
                                 plan.getName(),
                                 // copies, so lazy collections are loaded here and not while writing the JSON
                                 List.copyOf(plan.getCoverages()),

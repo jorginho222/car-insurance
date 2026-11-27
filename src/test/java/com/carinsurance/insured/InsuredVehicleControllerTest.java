@@ -3,16 +3,13 @@ package com.carinsurance.insured;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.carinsurance.common.exception.DuplicateResourceException;
-import com.carinsurance.common.exception.InvalidRequestException;
 import com.carinsurance.common.exception.ResourceNotFoundException;
 import com.carinsurance.insured.dto.InsuredVehicleResponse;
 import com.carinsurance.vehicle.VehicleType;
@@ -46,7 +43,9 @@ class InsuredVehicleControllerTest {
         return new InsuredVehicleResponse(
                 id,
                 1L,
-                "ABC-123",
+                "AB123CD",
+                "ENG-12345",
+                "8AP17000000123456",
                 new VehicleCatalogResponse(7L, "Toyota", "Corolla", "2.0 XEI", VehicleType.CAR),
                 new VehicleValuationResponse(20L, 7L, 2020, new BigDecimal("20000.00"), LocalDate.of(2026, 1, 1)),
                 Instant.now(),
@@ -54,68 +53,25 @@ class InsuredVehicleControllerTest {
     }
 
     @Test
-    void createReturns201WithLocation() throws Exception {
-        given(service.create(eq(1L), any())).willReturn(response(5L));
+    void getReturnsTheVehicle() throws Exception {
+        given(service.findById(1L, 5L)).willReturn(response(5L));
 
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredVehicleTestData.json(20L, "ABC-123")))
-                .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost" + BASE + "/5"))
+        mockMvc.perform(get(BASE + "/5"))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(5))
                 .andExpect(jsonPath("$.insuredId").value(1))
+                .andExpect(jsonPath("$.licensePlate").value("AB123CD"))
+                .andExpect(jsonPath("$.engineNumber").value("ENG-12345"))
+                .andExpect(jsonPath("$.chassisNumber").value("8AP17000000123456"))
                 .andExpect(jsonPath("$.catalog.make").value("Toyota"))
                 .andExpect(jsonPath("$.valuation.year").value(2020));
     }
 
     @Test
-    void createReturns400WithFieldErrors() throws Exception {
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredVehicleTestData.json(null, "bad_plate!")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Validation failed"))
-                .andExpect(jsonPath("$.errors.valuationId").exists())
-                .andExpect(jsonPath("$.errors.licensePlate").exists());
-    }
+    void getReturns404WhenMissing() throws Exception {
+        given(service.findById(1L, 5L)).willThrow(new ResourceNotFoundException("Vehicle", 5L));
 
-    @Test
-    void createReturns400ForMalformedJson() throws Exception {
-        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{ not json"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void createReturns400WhenValuationIsNotCurrent() throws Exception {
-        given(service.create(eq(1L), any())).willThrow(new InvalidRequestException("not current"));
-
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredVehicleTestData.json(20L, "ABC-123")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("not current"));
-    }
-
-    @Test
-    void createReturns404WhenInsuredMissing() throws Exception {
-        given(service.create(eq(1L), any())).willThrow(new ResourceNotFoundException("Insured", 1L));
-
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredVehicleTestData.json(20L, "ABC-123")))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.detail").value("Insured with id 1 not found"));
-    }
-
-    @Test
-    void createReturns409OnDuplicatePlate() throws Exception {
-        given(service.create(eq(1L), any())).willThrow(new DuplicateResourceException("dup"));
-
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredVehicleTestData.json(20L, "ABC-123")))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value("dup"));
+        mockMvc.perform(get(BASE + "/5")).andExpect(status().isNotFound());
     }
 
     @Test
@@ -129,15 +85,13 @@ class InsuredVehicleControllerTest {
                 .andExpect(jsonPath("$.page.totalElements").value(1));
     }
 
+    /** Vehicles are created by issuing a policy. */
     @Test
-    void deleteReturns204() throws Exception {
-        mockMvc.perform(delete(BASE + "/5")).andExpect(status().isNoContent());
-    }
-
-    @Test
-    void deleteReturns404WhenMissing() throws Exception {
-        willThrow(new ResourceNotFoundException("Vehicle", 5L)).given(service).delete(1L, 5L);
-
-        mockMvc.perform(delete(BASE + "/5")).andExpect(status().isNotFound());
+    void writeMethodsAreNotExposed() throws Exception {
+        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed());
+        mockMvc.perform(put(BASE + "/5").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed());
+        mockMvc.perform(delete(BASE + "/5")).andExpect(status().isMethodNotAllowed());
     }
 }

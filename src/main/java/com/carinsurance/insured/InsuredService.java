@@ -2,13 +2,13 @@ package com.carinsurance.insured;
 
 import com.carinsurance.common.exception.DuplicateResourceException;
 import com.carinsurance.common.exception.ResourceNotFoundException;
-import com.carinsurance.insured.dto.InsuredRequest;
 import com.carinsurance.insured.dto.InsuredResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Insureds are created when a policy is issued; they can be read by id or listed. */
 @Service
 @Transactional(readOnly = true)
 public class InsuredService {
@@ -23,54 +23,31 @@ public class InsuredService {
         this.mapper = mapper;
     }
 
+    /**
+     * Creates an insured. Meant to be called while issuing a policy, in its transaction.
+     *
+     * @throws DuplicateResourceException if another insured has the same document number or email
+     */
     @Transactional
-    public InsuredResponse create(InsuredRequest request) {
-        if (repository.existsByDocumentNumber(request.documentNumber().trim())) {
-            throw duplicateDocument(request);
+    public Insured create(NewInsured data) {
+        String documentNumber = data.documentNumber().trim();
+        if (repository.existsByDocumentNumber(documentNumber)) {
+            throw new DuplicateResourceException(
+                    "An insured with document number '%s' already exists".formatted(documentNumber));
         }
-        if (repository.existsByEmailIgnoreCase(request.email().trim())) {
-            throw duplicateEmail(request);
+        String email = InsuredMapper.normalizeEmail(data.email());
+        if (repository.existsByEmailIgnoreCase(email)) {
+            throw new DuplicateResourceException("An insured with email '%s' already exists".formatted(email));
         }
-        Insured saved = repository.saveAndFlush(mapper.toEntity(request));
-        return mapper.toResponse(saved);
+        return repository.saveAndFlush(mapper.toEntity(data));
     }
 
     public InsuredResponse findById(Long id) {
-        return mapper.toResponse(getOrThrow(id));
+        return mapper.toResponse(
+                repository.findById(id).orElseThrow(() -> new ResourceNotFoundException(RESOURCE, id)));
     }
 
     public Page<InsuredResponse> findAll(Pageable pageable) {
         return repository.findAll(pageable).map(mapper::toResponse);
-    }
-
-    @Transactional
-    public InsuredResponse update(Long id, InsuredRequest request) {
-        Insured insured = getOrThrow(id);
-        if (repository.existsByDocumentNumberAndIdNot(request.documentNumber().trim(), id)) {
-            throw duplicateDocument(request);
-        }
-        if (repository.existsByEmailIgnoreCaseAndIdNot(request.email().trim(), id)) {
-            throw duplicateEmail(request);
-        }
-        mapper.updateEntity(insured, request);
-        return mapper.toResponse(repository.saveAndFlush(insured));
-    }
-
-    @Transactional
-    public void delete(Long id) {
-        repository.delete(getOrThrow(id));
-    }
-
-    private Insured getOrThrow(Long id) {
-        return repository.findById(id).orElseThrow(() -> new ResourceNotFoundException(RESOURCE, id));
-    }
-
-    private static DuplicateResourceException duplicateDocument(InsuredRequest request) {
-        return new DuplicateResourceException(
-                "An insured with document number '%s' already exists".formatted(request.documentNumber()));
-    }
-
-    private static DuplicateResourceException duplicateEmail(InsuredRequest request) {
-        return new DuplicateResourceException("An insured with email '%s' already exists".formatted(request.email()));
     }
 }

@@ -12,8 +12,6 @@ import java.util.Map;
  */
 final class PremiumCalculator {
 
-    static final List<Integer> INSTALLMENT_OPTIONS = List.of(1, 12);
-
     private static final int CENTS = 2;
 
     private PremiumCalculator() {}
@@ -37,7 +35,7 @@ final class PremiumCalculator {
                 .map(type -> new PlanCoverage(type, premiums.get(type)))
                 .toList();
         BigDecimal netPremium = netPremium(coverages);
-        List<PaymentOption> paymentOptions = INSTALLMENT_OPTIONS.stream()
+        List<PaymentOption> paymentOptions = PaymentOption.INSTALLMENT_OPTIONS.stream()
                 .map(installments -> paymentOption(netPremium, installments, charge))
                 .toList();
         return new QuotationPlan(plan, coverages, netPremium, paymentOptions);

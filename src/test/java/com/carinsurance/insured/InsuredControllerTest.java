@@ -2,22 +2,24 @@ package com.carinsurance.insured;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.carinsurance.common.exception.DuplicateResourceException;
 import com.carinsurance.common.exception.ResourceNotFoundException;
-import com.carinsurance.insured.dto.InsuredRequest;
+import com.carinsurance.insured.dto.AddressDto;
 import com.carinsurance.insured.dto.InsuredResponse;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,55 +34,30 @@ class InsuredControllerTest {
     private InsuredService service;
 
     private static InsuredResponse response(long id) {
-        InsuredRequest r = InsuredTestData.request("DOC-1", "jane@example.com");
         return new InsuredResponse(
                 id,
-                r.firstName(),
-                r.lastName(),
-                r.documentNumber(),
-                r.dateOfBirth(),
-                r.email(),
-                r.phone(),
-                r.address(),
-                r.licenseNumber(),
-                r.licenseIssueDate(),
+                "Jane",
+                "Doe",
+                "DOC-1",
+                LocalDate.of(1990, 5, 17),
+                "jane@example.com",
+                "+54 11 5555 1234",
+                new AddressDto("Av. Rivadavia 1234", "FLORIDA", "Buenos Aires", "1602", "Argentina"),
+                "DL-998877",
+                LocalDate.of(2010, 6, 1),
                 Instant.now(),
                 Instant.now());
     }
 
     @Test
-    void createReturns201WithLocation() throws Exception {
-        given(service.create(any())).willReturn(response(1L));
+    void getReturnsTheInsured() throws Exception {
+        given(service.findById(1L)).willReturn(response(1L));
 
-        mockMvc.perform(post("/api/v1/insureds")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredTestData.json("DOC-1", "jane@example.com")))
-                .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/v1/insureds/1"))
+        mockMvc.perform(get("/api/v1/insureds/1"))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.address.city").value("Springfield"));
-    }
-
-    @Test
-    void createReturns400WithFieldErrors() throws Exception {
-        mockMvc.perform(post("/api/v1/insureds")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredTestData.json("", "not-an-email")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Validation failed"))
-                .andExpect(jsonPath("$.errors.documentNumber").exists())
-                .andExpect(jsonPath("$.errors.email").exists());
-    }
-
-    @Test
-    void createReturns409OnDuplicate() throws Exception {
-        given(service.create(any())).willThrow(new DuplicateResourceException("dup"));
-
-        mockMvc.perform(post("/api/v1/insureds")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredTestData.json("DOC-1", "jane@example.com")))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value("dup"));
+                .andExpect(jsonPath("$.address.locality").value("FLORIDA"))
+                .andExpect(jsonPath("$.address.province").value("Buenos Aires"));
     }
 
     @Test
@@ -93,14 +70,26 @@ class InsuredControllerTest {
     }
 
     @Test
-    void deleteReturns204() throws Exception {
-        mockMvc.perform(delete("/api/v1/insureds/1")).andExpect(status().isNoContent());
+    void listReturnsPagedInsureds() throws Exception {
+        given(service.findAll(any())).willReturn(new PageImpl<>(List.of(response(1L)), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/insureds"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
     }
 
+    /** Insureds are created by issuing a policy. */
     @Test
-    void deleteReturns404WhenMissing() throws Exception {
-        willThrow(new ResourceNotFoundException("Insured", 5L)).given(service).delete(5L);
-
-        mockMvc.perform(delete("/api/v1/insureds/5")).andExpect(status().isNotFound());
+    void writeMethodsAreNotExposed() throws Exception {
+        mockMvc.perform(post("/api/v1/insureds")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isMethodNotAllowed());
+        mockMvc.perform(put("/api/v1/insureds/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isMethodNotAllowed());
+        mockMvc.perform(delete("/api/v1/insureds/1")).andExpect(status().isMethodNotAllowed());
     }
 }

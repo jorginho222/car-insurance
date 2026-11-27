@@ -160,11 +160,6 @@ public class Insured {
         vehicle.setInsured(this);
     }
 
-    public void removeVehicle(InsuredVehicle vehicle) {
-        vehicles.remove(vehicle);
-        vehicle.setInsured(null);
-    }
-
     public Long getVersion() {
         return version;
     }

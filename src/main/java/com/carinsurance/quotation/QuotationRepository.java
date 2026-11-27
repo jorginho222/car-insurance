@@ -16,6 +16,10 @@ public interface QuotationRepository extends JpaRepository<Quotation, Long> {
     @EntityGraph(attributePaths = {"valuation.catalog", "locality.zone"})
     Optional<Quotation> findDetailedById(Long id);
 
+    /** The quotation with what a policy needs: valuation (and catalog entry), locality (and zone) and plans. */
+    @EntityGraph(attributePaths = {"valuation.catalog", "locality.zone", "plans"})
+    Optional<Quotation> findForPolicyById(Long id);
+
     /**
      * Open quotations of an email (stored lower-cased): {@link QuotationStatus#QUOTED} and valid through at least
      * {@code today}. Detailed like {@link #findDetailedById(Long)}.

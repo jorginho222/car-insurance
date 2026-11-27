@@ -33,6 +33,11 @@ public record QuotationResponse(
 
     public record Risk(String postalCode, String locality, String province, String zone, int driverAge) {}
 
+    /** {@code id} identifies the quoted plan, e.g. to create a policy from it. */
     public record PlanQuote(
-            Plan name, List<PlanCoverage> coverages, BigDecimal netPremium, List<PaymentOption> paymentOptions) {}
+            Long id,
+            Plan name,
+            List<PlanCoverage> coverages,
+            BigDecimal netPremium,
+            List<PaymentOption> paymentOptions) {}
 }

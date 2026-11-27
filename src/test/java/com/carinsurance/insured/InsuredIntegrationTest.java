@@ -1,23 +1,22 @@
 package com.carinsurance.insured;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.carinsurance.TestcontainersConfiguration;
-import com.jayway.jsonpath.JsonPath;
+import com.carinsurance.common.exception.DuplicateResourceException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+/** Insureds are created by issuing a policy; here they are created through the service and read through the API. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
@@ -29,60 +28,46 @@ class InsuredIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private InsuredRepository repository;
+    private InsuredService service;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void clean() {
-        repository.deleteAll();
+        jdbcTemplate.update("DELETE FROM policy");
+        jdbcTemplate.update("DELETE FROM insured");
     }
 
     @Test
-    void fullCrudRoundTrip() throws Exception {
-        String body = mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredTestData.json("DOC-100", "Jane@Example.com")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.email").value("jane@example.com"))
-                .andExpect(jsonPath("$.createdAt").exists())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-        Number id = JsonPath.read(body, "$.id");
+    void createdInsuredIsReadable() throws Exception {
+        Insured insured = service.create(InsuredTestData.newInsured("DOC-100", "Jane@Example.com"));
 
-        mockMvc.perform(get(BASE + "/" + id))
+        mockMvc.perform(get(BASE + "/" + insured.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.documentNumber").value("DOC-100"));
+                .andExpect(jsonPath("$.documentNumber").value("DOC-100"))
+                .andExpect(jsonPath("$.email").value("jane@example.com"))
+                .andExpect(jsonPath("$.address.street").value("Av. Rivadavia 1234"))
+                .andExpect(jsonPath("$.address.locality").value("FLORIDA"))
+                .andExpect(jsonPath("$.address.province").value("Buenos Aires"))
+                .andExpect(jsonPath("$.address.postalCode").value("1602"))
+                .andExpect(jsonPath("$.createdAt").exists());
 
         mockMvc.perform(get(BASE).param("page", "0").param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.page.totalElements").value(1));
 
-        mockMvc.perform(put(BASE + "/" + id)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredTestData.json("DOC-100", "jane.doe@example.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").value("jane.doe@example.com"));
-
-        mockMvc.perform(delete(BASE + "/" + id)).andExpect(status().isNoContent());
-        mockMvc.perform(get(BASE + "/" + id)).andExpect(status().isNotFound());
+        mockMvc.perform(get(BASE + "/999999999")).andExpect(status().isNotFound());
     }
 
     @Test
-    void duplicateDocumentOrEmailReturns409() throws Exception {
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredTestData.json("DOC-200", "first@example.com")))
-                .andExpect(status().isCreated());
+    void duplicateDocumentOrEmailIsRejected() {
+        service.create(InsuredTestData.newInsured("DOC-200", "first@example.com"));
 
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredTestData.json("DOC-200", "second@example.com")))
-                .andExpect(status().isConflict());
-
-        mockMvc.perform(post(BASE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(InsuredTestData.json("DOC-201", "FIRST@example.com")))
-                .andExpect(status().isConflict());
+        assertThatThrownBy(() -> service.create(InsuredTestData.newInsured("DOC-200", "second@example.com")))
+                .isInstanceOf(DuplicateResourceException.class);
+        assertThatThrownBy(() -> service.create(InsuredTestData.newInsured("DOC-201", "FIRST@example.com")))
+                .isInstanceOf(DuplicateResourceException.class);
     }
 }
